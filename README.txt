@@ -1,3 +1,11 @@
+(Also to make it run go to mvnw.cmd run the terminal there and add this to the terminal
+cd (your file path like this C:\Users\Drei\Desktop\Programming\CarRentalSystem\Application)
+$env:DB_PASSWORD = "(Your DB password)"
+.\mvnw.cmd spring-boot:run
+
+then wait for it to finish
+)
+
 PROJECT OVERVIEW
 The Car Rental Management System is a database-driven application designed to organize the main operations of a self-drive car rental business. It aims to manage customer information, driver's license verification, vehicle records, rental rates, reservations, payments, vehicle inspections, damage records, maintenance, cancellations, and rental history using PostgreSQL.
 
