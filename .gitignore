@@ -37,3 +37,7 @@ build/
 
 # Logs
 *.log
+
+# Uploaded license and inspection photos
+Application/uploads/
+uploads/

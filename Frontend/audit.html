@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="en"><head><title>Audit log – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div><h1 class="font-display text-3xl font-extrabold">Audit log</h1>
+      <p class="mt-1 text-asphalt/70">A record of important staff actions: approvals, payment updates, vehicle status changes, fee decisions and account changes.</p></div>
+    <button id="csv" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm font-semibold hover:bg-concrete">Download CSV</button>
+  </div>
+  <form id="filters" class="mt-6 flex flex-wrap items-end gap-3">
+    <input id="q" type="search" placeholder="Search description" aria-label="Search description" class="w-full max-w-xs rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
+    <label class="text-sm font-semibold">Action <select id="fa" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option value="">All</option></select></label>
+    <label class="text-sm font-semibold">Record type <select id="ft" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option value="">All</option></select></label>
+    <label class="text-sm font-semibold">Staff <select id="fst" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option value="">All</option></select></label>
+    <label class="text-sm font-semibold">From <input id="from" type="date" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="text-sm font-semibold">To <input id="to" type="date" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <button type="button" id="clear" class="text-sm font-semibold text-teal underline">Clear</button>
+  </form>
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
+    <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">When</th><th class="p-4">Staff</th><th class="p-4">Action</th><th class="p-4">Record</th><th class="p-4">Details</th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+  <p id="empty" class="mt-4 hidden">No audit entries match these filters.</p>
+  <div class="mt-4 flex items-center gap-4"><button id="more" class="hidden rounded bg-asphalt px-4 py-2 text-sm font-semibold text-white hover:bg-teal">Load more</button><p id="count" class="text-sm text-asphalt/70"></p></div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+Auth.require(['ADMIN', 'SYSTEM_ADMIN']);
+const PAGE = 100;
+let entries = [], timer;
+
+function downloadCsv(name, header, rows) {
+  const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const body = [header, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + body], { type: 'text/csv;charset=utf-8' }));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const TONE = { DELETE: 'bg-brick/10 text-brick', REJECT: 'bg-brick/10 text-brick', CANCEL: 'bg-brick/10 text-brick', REFUND: 'bg-brick/10 text-brick',
+  APPROVE: 'bg-teal/10 text-teal', CONFIRM: 'bg-teal/10 text-teal', VERIFY: 'bg-teal/10 text-teal', CREATE: 'bg-teal/10 text-teal' };
+// Where each kind of record can be opened
+function recordLink(e) {
+  if (e.recordId == null) return '';
+  const id = Number(e.recordId);
+  const t = { rental: 'transaction.html?id=', vehicle: 'vehicle.html?id=', customer: 'customer.html?id=', damage_fee: 'damages.html?fee=' }[e.table];
+  return t ? `<a href="${t}${id}" class="font-semibold text-teal underline">#${id}</a>` : '#' + id;
+}
+function params(offset) {
+  const p = new URLSearchParams({ limit: PAGE, offset });
+  [['action', fa], ['table', ft], ['staffId', fst], ['q', q], ['from', from], ['to', to]].forEach(([k, el]) => { if (el.value.trim()) p.set(k, el.value.trim()); });
+  return p.toString();
+}
+async function load(append) {
+  try {
+    const list = await API.get('/admin/audit?' + params(append ? entries.length : 0));
+    entries = append ? entries.concat(list) : list;
+    empty.classList.toggle('hidden', entries.length > 0);
+    more.classList.toggle('hidden', list.length < PAGE);
+    count.textContent = entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies') + ' shown';
+    rows.innerHTML = entries.map(e => `<tr class="border-b border-asphalt/10 align-top last:border-0"><td class="p-4 whitespace-nowrap">${esc(dt(e.at))}</td>
+      <td class="p-4">${esc(e.staff)}</td><td class="p-4"><span class="rounded px-2 py-0.5 text-xs font-semibold ${TONE[e.action] || 'bg-concrete'}">${esc(e.action)}</span></td>
+      <td class="p-4 whitespace-nowrap">${esc(e.table.replace('_', ' '))} ${recordLink(e)}</td><td class="p-4">${esc(e.description || '')}</td></tr>`).join('');
+  } catch (err) { toast(err.message, true); }
+}
+async function options() {
+  try {
+    const o = await API.get('/admin/audit/options');
+    const add = (el, items, val, label) => items.forEach(i => el.insertAdjacentHTML('beforeend', `<option value="${esc(val(i))}">${esc(label(i))}</option>`));
+    add(fa, o.actions, x => x, x => x); add(ft, o.tables, x => x, x => x.replace('_', ' ')); add(fst, o.staff, x => x.id, x => x.name);
+  } catch (err) { toast(err.message, true); }
+}
+filters.onsubmit = e => e.preventDefault();
+[fa, ft, fst, from, to].forEach(el => el.onchange = () => load(false));
+q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => load(false), 300); };
+clear.onclick = () => { q.value = fa.value = ft.value = fst.value = from.value = to.value = ''; load(false); };
+more.onclick = () => load(true);
+csv.onclick = () => entries.length ? downloadCsv('audit-log.csv', ['When', 'Staff', 'Action', 'Record type', 'Record id', 'Details'],
+  entries.map(e => [dt(e.at), e.staff, e.action, e.table, e.recordId ?? '', e.description])) : toast('Nothing to download.', true);
+options(); load(false);
+</script></body></html>

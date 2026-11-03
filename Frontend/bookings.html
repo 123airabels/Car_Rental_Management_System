@@ -1,0 +1,192 @@
+<!DOCTYPE html><html lang="en"><head><title>Bookings – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <div class="flex items-center justify-between gap-3">
+    <h1 class="font-display text-3xl font-extrabold">Bookings</h1>
+    <button id="newBtn" class="hidden rounded bg-asphalt px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal">New booking</button>
+  </div>
+  <div id="stats" class="mt-6 grid gap-4 sm:grid-cols-4"></div>
+  <form id="filters" class="mt-6 flex flex-wrap gap-3">
+    <input id="q" type="search" placeholder="Search customer, email or plate" aria-label="Search bookings" class="w-full max-w-xs rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
+    <select id="fs" aria-label="Filter by status" class="rounded border border-asphalt/25 bg-white px-3 py-2.5"><option value="">All statuses</option><option>Pending</option><option>Approved</option><option>Active</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select>
+  </form>
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">#</th><th class="p-4">Customer</th><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">License</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-4 hidden">No bookings match.</p>
+</main>
+
+<!-- New booking / change booking -->
+<div id="modal" class="fixed inset-0 z-40 hidden items-center justify-center overflow-y-auto bg-asphalt/60 p-4" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="w-full max-w-lg rounded-lg bg-white p-6">
+    <h2 id="mtitle" class="font-display text-xl font-extrabold"></h2>
+    <div id="custBox" class="mt-4">
+      <label class="block text-sm font-semibold">Customer
+        <input id="cq" type="search" placeholder="Type a name or email, then pick" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <select id="cust" size="4" aria-label="Customer" class="mt-2 w-full rounded border border-asphalt/25 bg-white px-3 py-2 text-sm"></select>
+    </div>
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <label class="text-sm font-semibold">Pickup<input type="date" id="m_start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold">Return<input type="date" id="m_end" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    </div>
+    <label class="mt-4 block text-sm font-semibold">Vehicle
+      <select id="m_car" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5"></select></label>
+    <p id="avail" class="mt-4 rounded bg-concrete p-3 text-sm font-semibold" aria-live="polite"></p>
+    <label id="apprBox" class="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" id="m_appr"> Approve right away (needs a verified license)</label>
+    <div class="mt-6 flex justify-end gap-3">
+      <button id="mCancel" type="button" class="rounded border border-asphalt/25 px-4 py-2 font-semibold">Close</button>
+      <button id="mSave" type="button" class="rounded bg-teal px-4 py-2 font-semibold text-white hover:brightness-110 disabled:opacity-40" disabled>Save</button>
+    </div>
+  </div>
+</div>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+const canAct = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);   // Finance can look but not change bookings
+if (canAct) newBtn.classList.remove('hidden');
+const today = new Date().toISOString().slice(0, 10);
+const day = v => String(v || '').slice(0, 10);
+let all = [], editing = null, okToSave = false, seq = 0;
+
+/* ---------- list ---------- */
+async function load() {
+  try {
+    all = await API.get('/admin/rentals' + (fs.value ? '?status=' + encodeURIComponent(fs.value) : ''));
+    const c = s => all.filter(r => r.status === s).length;
+    stats.innerHTML = [['Pending', c('PENDING')], ['Approved', c('APPROVED')], ['Active', c('ACTIVE')], ['Shown', all.length]]
+      .map(([l, k]) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-3xl font-extrabold">${k}</p></div>`).join('');
+    draw();
+  } catch (e) { toast(e.message, true); }
+}
+function actions(r) {
+  const rec = `<a href="transaction.html?id=${Number(r.id)}" class="font-semibold text-teal underline">Record</a>`
+    + (['APPROVED', 'ACTIVE', 'COMPLETED'].includes(r.status) ? ` <span class="text-asphalt/30">|</span> <a href="inspection.html?id=${Number(r.id)}" class="font-semibold text-teal underline">Inspection</a>` : '');
+  if (!canAct) return rec;
+  const b = (a, t, c) => `<button data-a="${a}" data-id="${Number(r.id)}" class="act font-semibold underline ${c}">${t}</button>`;
+  const out = [];
+  if (r.status === 'PENDING') out.push(b('approve', 'Approve', 'text-teal'));
+  if (['PENDING', 'APPROVED'].includes(r.status)) out.push(b('edit', 'Edit', 'text-asphalt'));
+  if (r.status === 'PENDING') out.push(b('reject', 'Reject', 'text-brick'));
+  if (['PENDING', 'APPROVED'].includes(r.status)) out.push(b('cancel', 'Cancel', 'text-brick'));
+  out.push(rec);
+  return out.join(' <span class="text-asphalt/30">|</span> ');
+}
+function draw() {
+  const t = q.value.trim().toLowerCase();
+  const list = all.filter(r => !t || (r.customer + ' ' + r.customerEmail + ' ' + r.plateNumber + ' ' + r.vehicle).toLowerCase().includes(t));
+  empty.classList.toggle('hidden', list.length > 0);
+  rows.innerHTML = list.map(r => `<tr class="border-b border-asphalt/10 align-top last:border-0">
+    <td class="p-4 font-semibold">${Number(r.id)}</td>
+    <td class="p-4"><a href="customer.html?id=${Number(r.customerId)}" class="font-semibold text-teal underline">${esc(r.customer)}</a><br><span class="text-asphalt/60">${esc(r.customerEmail)}</span></td>
+    <td class="p-4">${esc(r.vehicle)}<br><span class="text-asphalt/60">${esc(r.plateNumber)}</span></td>
+    <td class="p-4">${esc(day(r.pickup))}</td><td class="p-4">${esc(day(r.returnBy))}</td>
+    <td class="p-4">${money(r.finalCost ?? r.estimatedCost ?? 0)}</td><td class="p-4">${badge(r.licenseStatus)}</td>
+    <td class="p-4">${badge(r.status)}${r.reason && ['REJECTED', 'CANCELLED'].includes(r.status) ? `<br><span class="text-xs text-asphalt/60">${esc(r.reason)}</span>` : ''}</td>
+    <td class="p-4 text-right whitespace-nowrap">${actions(r)}</td></tr>`).join('');
+}
+filters.onsubmit = e => e.preventDefault(); q.oninput = draw; fs.onchange = load;
+
+rows.onclick = async e => {
+  const b = e.target.closest('.act'); if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a, r = all.find(x => x.id == id);
+  try {
+    if (a === 'edit') return openModal(r);
+    if (a === 'approve') { if (!confirm('Approve booking #' + id + '?')) return; await API.post('/admin/rentals/' + id + '/approve'); toast('Booking approved'); }
+    else {
+      const reason = prompt((a === 'reject' ? 'Reject' : 'Cancel') + ' booking #' + id + '. Reason (the customer will see it):');
+      if (reason === null) return;
+      if (!reason.trim()) return toast('Enter a reason.', true);
+      await API.post('/admin/rentals/' + id + '/' + a, { reason: reason.trim() });
+      toast('Booking ' + (a === 'reject' ? 'rejected' : 'cancelled'));
+    }
+    load();
+  } catch (err) { toast(err.message, true); load(); }
+};
+
+/* ---------- new / edit ---------- */
+function openModal(r) {
+  editing = r || null;
+  mtitle.textContent = r ? 'Change booking #' + r.id : 'New booking';
+  custBox.classList.toggle('hidden', !!r); apprBox.classList.toggle('hidden', !!r);
+  m_start.min = m_end.min = today;
+  m_start.value = r ? day(r.pickup) : ''; m_end.value = r ? day(r.returnBy) : '';
+  m_appr.checked = false; cq.value = ''; cust.innerHTML = '';
+  if (r) m_start.min = '';   // an existing pickup date may already be today or earlier
+  modal.classList.replace('hidden', 'flex');
+  loadCars(); check();
+}
+const closeModal = () => modal.classList.replace('flex', 'hidden');
+mCancel.onclick = closeModal;
+document.onkeydown = e => e.key === 'Escape' && closeModal();
+newBtn.onclick = () => openModal(null);
+
+const validDates = () => m_start.value && m_end.value && m_end.value > m_start.value;
+async function loadCars() {
+  const keep = m_car.value;
+  let cars = [];
+  try {
+    // With valid dates, only cars free for them are listed. When changing a booking its own car is always offered too.
+    cars = await API.get('/vehicles' + (validDates() ? '?start=' + m_start.value + '&end=' + m_end.value : ''));
+  } catch (e) { toast(e.message, true); }
+  if (editing && !cars.some(c => c.id === editing.vehicleId)) cars.unshift({ id: editing.vehicleId, make: editing.vehicle, model: '' });
+  cars = cars.filter(c => !['MAINTENANCE', 'RETIRED'].includes(c.status));
+  m_car.innerHTML = '<option value="">Choose a vehicle</option>' + cars.map(c => `<option value="${Number(c.id)}">${esc(c.make)} ${esc(c.model)}${c.category ? ' (' + esc(c.category) + ')' : ''}</option>`).join('');
+  m_car.value = keep || (editing ? String(editing.vehicleId) : '');
+  if (m_car.value !== (keep || (editing ? String(editing.vehicleId) : ''))) m_car.value = '';
+}
+async function check() {
+  const my = ++seq; okToSave = false; mSave.disabled = true;
+  const carId = m_car.value;
+  if (!validDates()) { avail.textContent = 'Choose a pickup date and a later return date.'; return; }
+  if (!carId) { avail.textContent = 'Choose a vehicle.'; return; }
+  avail.textContent = 'Checking…';
+  try {
+    const a = editing
+      ? await API.get('/admin/rentals/' + editing.id + '/availability?vehicleId=' + carId + '&start=' + m_start.value + '&end=' + m_end.value)
+      : await API.get('/vehicles/' + carId + '/availability?start=' + m_start.value + '&end=' + m_end.value);
+    if (my !== seq) return;   // a newer check is running
+    okToSave = a.available; avail.textContent = a.available ? 'Available for these dates.' : (a.reason || 'Not available for these dates.');
+    mSave.disabled = !okToSave || (!editing && !cust.value);
+  } catch (e) { if (my === seq) avail.textContent = e.message; }
+}
+m_start.onchange = m_end.onchange = async () => { await loadCars(); check(); };
+m_car.onchange = check;
+cust.onchange = () => { mSave.disabled = !okToSave || !cust.value; };
+
+let cqTimer;
+cq.oninput = () => {
+  clearTimeout(cqTimer);
+  cqTimer = setTimeout(async () => {
+    if (cq.value.trim().length < 2) { cust.innerHTML = ''; return; }
+    try {
+      const list = (await API.get('/admin/customers?q=' + encodeURIComponent(cq.value.trim()))).filter(c => c.status === 'ACTIVE');
+      cust.innerHTML = list.length ? list.map(c => `<option value="${Number(c.id)}">${esc(c.name)} – ${esc(c.email)}${c.licenseStatus === 'VERIFIED' ? '' : ' (license not verified)'}</option>`).join('')
+        : '<option disabled>No active customers found</option>';
+    } catch (e) { toast(e.message, true); }
+  }, 300);
+};
+
+mSave.onclick = async () => {
+  mSave.disabled = true;
+  try {
+    if (editing) {
+      await API.put('/admin/rentals/' + editing.id, { vehicleId: Number(m_car.value), start: m_start.value, end: m_end.value });
+      toast('Booking updated');
+    } else {
+      await API.post('/admin/rentals', { customerId: Number(cust.value), vehicleId: Number(m_car.value), start: m_start.value, end: m_end.value, approve: m_appr.checked });
+      toast(m_appr.checked ? 'Booking created and approved' : 'Booking created');
+    }
+    closeModal(); load();
+  } catch (e) { toast(e.message, true); check(); }
+};
+load();
+</script></body></html>

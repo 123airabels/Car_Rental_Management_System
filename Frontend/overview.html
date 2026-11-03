@@ -1,0 +1,110 @@
+<!DOCTYPE html><html lang="en"><head><title>Dashboard – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div><h1 class="font-display text-3xl font-extrabold">Dashboard</h1><p id="hello" class="mt-1 text-asphalt/70"></p></div>
+    <button id="refresh" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm font-semibold hover:bg-concrete">Refresh</button>
+  </div>
+  <p id="err" class="mt-6 hidden font-semibold text-brick"></p>
+
+  <h2 class="mt-8 font-display text-lg font-bold">Needs attention</h2>
+  <div id="attention" class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>
+
+  <div id="moneyBox" class="hidden">
+    <h2 class="mt-8 font-display text-lg font-bold">Money</h2>
+    <div id="money" class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-5"></div>
+  </div>
+
+  <div class="mt-8 grid gap-6 lg:grid-cols-2">
+    <section id="revBox" class="hidden rounded-lg bg-white p-6"><h2 class="font-display text-lg font-bold">Payments received, last 6 months</h2><div id="rev" class="mt-4"></div></section>
+    <section class="rounded-lg bg-white p-6"><h2 class="font-display text-lg font-bold">Bookings made, last 6 months</h2><div id="book" class="mt-4"></div></section>
+    <section class="rounded-lg bg-white p-6"><h2 class="font-display text-lg font-bold">Fleet</h2><p id="fleetNote" class="text-sm text-asphalt/70"></p><div id="fleet" class="mt-4"></div></section>
+    <section class="rounded-lg bg-white p-6"><h2 class="font-display text-lg font-bold">Rentals by status</h2><p id="custNote" class="text-sm text-asphalt/70"></p><div id="rentals" class="mt-4"></div></section>
+  </div>
+
+  <section class="mt-6 rounded-lg bg-white p-6">
+    <div class="flex items-center justify-between"><h2 class="font-display text-lg font-bold">Cars out on rent</h2><a href="bookings.html" class="text-sm font-semibold text-teal underline">All bookings</a></div>
+    <div class="mt-3 overflow-x-auto"><table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="py-2 pr-4">Rental</th><th class="py-2 pr-4">Customer</th><th class="py-2 pr-4">Vehicle</th><th class="py-2 pr-4">Return by</th><th class="py-2"></th></tr></thead>
+      <tbody id="ret"></tbody></table></div>
+    <p id="retEmpty" class="mt-3 hidden text-sm text-asphalt/70">No cars are out on rent right now.</p>
+  </section>
+
+  <section id="actBox" class="mt-6 hidden rounded-lg bg-white p-6">
+    <div class="flex items-center justify-between"><h2 class="font-display text-lg font-bold">Recent admin activity</h2><a href="audit.html" class="text-sm font-semibold text-teal underline">Full audit log</a></div>
+    <ul id="act" class="mt-3 divide-y divide-asphalt/10 text-sm"></ul>
+  </section>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+hello.textContent = 'Signed in as ' + me.name + ' (' + me.role.replace('_', ' ').toLowerCase() + ')';
+
+// A horizontal bar chart made of plain divs: rows = [label, value, optional colour class]
+function bars(rows, fmt) {
+  const max = Math.max(1, ...rows.map(r => Number(r[1])));
+  return rows.map(([l, v, c]) => `<div class="mb-2 flex items-center gap-3 text-sm"><span class="w-24 shrink-0 text-asphalt/70">${esc(l)}</span>
+    <div class="h-5 flex-1 rounded bg-concrete"><div class="h-5 rounded ${c || 'bg-teal'}" style="width:${Math.max(Number(v) ? 2 : 0, Number(v) / max * 100)}%"></div></div>
+    <span class="w-24 shrink-0 text-right font-semibold">${fmt ? fmt(v) : v}</span></div>`).join('') || '<p class="text-sm text-asphalt/60">No data yet.</p>';
+}
+const monthName = m => new Date(m + '-01T00:00').toLocaleString('en', { month: 'short', year: '2-digit' });
+const title = s => s.charAt(0) + s.slice(1).toLowerCase();
+
+const TILES = [
+  ['pendingApprovals', 'Bookings to approve', 'bookings.html'], ['pickupsToday', 'Cars to hand over', 'bookings.html'],
+  ['returnsDueToday', 'Returns due today', 'bookings.html'], ['overdueReturns', 'Overdue returns', 'bookings.html', true],
+  ['licensesToReview', 'Licenses to review', 'licenses.html?status=PENDING'], ['paymentsToConfirm', 'Payments to confirm', 'transactions.html?tab=payments'],
+  ['disputedFees', 'Disputed damage fees', 'damages.html', true], ['damageWithoutFee', 'Damage waiting for a fee', 'damages.html'],
+  ['maintenanceOpen', 'Open maintenance jobs', 'admin.html']
+];
+
+async function load() {
+  try {
+    const d = await API.get('/admin/dashboard');
+    err.classList.add('hidden');
+    attention.innerHTML = TILES.map(([k, l, href, red]) => {
+      const n = d.attention[k] || 0;
+      return `<a href="${href}" class="rounded-lg bg-white p-4 hover:ring-2 hover:ring-teal/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal">
+        <p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-3xl font-extrabold ${n > 0 && red ? 'text-brick' : ''}">${n}</p></a>`;
+    }).join('');
+
+    if (d.money) {
+      moneyBox.classList.remove('hidden'); revBox.classList.remove('hidden');
+      const m = d.money, t = (l, v) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-2xl font-extrabold">${money(v)}</p></div>`;
+      document.getElementById('money').innerHTML = t('Received this month', m.paidThisMonth) + t('Received in total', m.totalPaid) + t('Refunded', m.totalRefunded)
+        + t('Unpaid damage fees', m.unpaidDamageFees) + t('Unpaid late fees', m.unpaidLateFees);
+      rev.innerHTML = bars(m.revenueByMonth.map(x => [monthName(x.month), x.value]), money);
+    }
+    book.innerHTML = bars(d.bookingsByMonth.map(x => [monthName(x.month), x.value]));
+
+    const FC = { AVAILABLE: 'bg-teal', RENTED: 'bg-asphalt', MAINTENANCE: 'bg-line', RETIRED: 'bg-asphalt/30' };
+    const fleetRows = Object.entries(d.fleetByStatus), total = fleetRows.reduce((s, [, n]) => s + n, 0);
+    const usable = total - (d.fleetByStatus.RETIRED || 0), rented = d.fleetByStatus.RENTED || 0;
+    fleetNote.textContent = usable ? Math.round(rented / usable * 100) + '% of the working fleet is out on rent (' + rented + ' of ' + usable + ').' : '';
+    fleet.innerHTML = bars(fleetRows.map(([k, n]) => [title(k), n, FC[k]]));
+
+    const RC = { PENDING: 'bg-line', APPROVED: 'bg-teal', ACTIVE: 'bg-asphalt', COMPLETED: 'bg-teal/60', CANCELLED: 'bg-brick', REJECTED: 'bg-brick/70' };
+    custNote.textContent = d.totalCustomers + ' customers (' + d.newCustomersThisMonth + ' new this month).';
+    rentals.innerHTML = bars(Object.entries(d.rentalsByStatus).map(([k, n]) => [title(k), n, RC[k]]));
+
+    retEmpty.classList.toggle('hidden', d.upcomingReturns.length > 0);
+    ret.innerHTML = d.upcomingReturns.map(r => `<tr class="border-b border-asphalt/10 last:border-0">
+      <td class="py-2 pr-4">#${r.id}</td><td class="py-2 pr-4 font-semibold">${esc(r.customer)}</td><td class="py-2 pr-4">${esc(r.vehicle)} <span class="text-asphalt/60">${esc(r.plateNumber)}</span></td>
+      <td class="py-2 pr-4">${esc(dt(r.returnBy))} ${r.overdue ? '<span class="rounded bg-brick/10 px-2 py-0.5 text-xs font-semibold text-brick">Overdue</span>' : ''}</td>
+      <td class="py-2 text-right"><a href="inspection.html?id=${r.id}" class="font-semibold text-teal underline">Inspection</a></td></tr>`).join('');
+
+    if (d.recentActivity) {
+      actBox.classList.remove('hidden');
+      act.innerHTML = d.recentActivity.map(a => `<li class="flex flex-wrap items-baseline gap-x-3 py-2"><span class="w-36 shrink-0 text-asphalt/60">${esc(dt(a.at))}</span>
+        <span class="rounded bg-concrete px-2 py-0.5 text-xs font-semibold">${esc(a.action)}</span><span class="flex-1">${esc(a.description)}</span><span class="text-asphalt/60">${esc(a.staff)}</span></li>`).join('');
+    }
+  } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); }
+}
+refresh.onclick = load; load();
+</script></body></html>

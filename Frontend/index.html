@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><title>Byahe Rentals – Rent a car online</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<section class="bg-asphalt text-white">
+  <div class="mx-auto max-w-6xl px-5 pb-14 pt-12 md:pt-20">
+    <h1 class="max-w-2xl font-display text-4xl font-black leading-tight md:text-6xl">Pick your dates. Pick your car. Drive.</h1>
+    <p class="mt-4 max-w-xl text-white/75">Clear daily rates, an inspection report at pickup and return, and online payment.</p>
+    <div class="my-8 h-1 w-full max-w-md" style="background:repeating-linear-gradient(90deg,#FCA311 0 24px,transparent 24px 40px)"></div>
+    <form action="vehicles.html" class="grid gap-4 rounded-lg bg-white p-5 text-asphalt md:grid-cols-4 md:items-end">
+      <label class="block text-sm font-semibold">Pickup date<input required type="date" name="start" id="start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="block text-sm font-semibold">Return date<input required type="date" name="end" id="end" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="block text-sm font-semibold">Vehicle type
+        <select name="category" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option value="">Any type</option><option>Sedan</option><option>SUV</option><option>Pickup</option><option>Van</option></select></label>
+      <button class="rounded bg-line px-5 py-3 font-bold text-asphalt hover:brightness-95">Search cars</button>
+    </form>
+  </div>
+</section>
+<main class="mx-auto max-w-6xl px-5 py-12">
+  <h2 class="font-display text-2xl font-extrabold">Available now</h2>
+  <div id="featured" class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+  <ul class="mt-14 grid gap-6 border-t border-asphalt/15 pt-8 md:grid-cols-3">
+    <li><h3 class="font-display font-bold">Inspection on every rental</h3><p class="mt-1 text-sm text-asphalt/70">Photos are taken at pickup and return, so damage fees are never a surprise.</p></li>
+    <li><h3 class="font-display font-bold">Free cancellation window</h3><p class="mt-1 text-sm text-asphalt/70">Cancel from your dashboard before pickup. Fees depend on how close you are to the date.</p></li>
+    <li><h3 class="font-display font-bold">Pay online</h3><p class="mt-1 text-sm text-asphalt/70">Card and e-wallet payments, with a confirmation sent to your email or phone.</p></li>
+  </ul>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const today = new Date().toISOString().slice(0, 10);
+start.min = end.min = today;
+start.onchange = () => { end.min = start.value; };
+API.get('/vehicles').then(vs => featured.innerHTML = vs.filter(v => v.status === 'AVAILABLE').slice(0, 3).map(v => vehicleCard(v)).join(''))
+  .catch(e => featured.textContent = 'Could not load cars: ' + e.message);
+</script></body></html>

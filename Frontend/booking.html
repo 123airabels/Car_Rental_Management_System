@@ -1,0 +1,113 @@
+<!DOCTYPE html><html lang="en"><head><title>Booking – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-3xl px-5 py-10">
+  <a href="dashboard.html" class="text-sm font-semibold text-teal underline">&larr; Back to my rentals</a>
+  <p id="err" class="mt-6 hidden font-semibold text-brick"></p>
+
+  <div id="box" class="mt-4 hidden">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <h1 id="title" class="font-display text-3xl font-extrabold"></h1><span id="badgeBox"></span>
+    </div>
+    <p id="note" class="mt-3 hidden rounded bg-white p-4 text-sm"></p>
+
+    <dl class="mt-6 grid gap-4 rounded-lg bg-white p-6 sm:grid-cols-2">
+      <div><dt class="text-sm text-asphalt/70">Booking number</dt><dd id="vId" class="font-display text-xl font-extrabold"></dd></div>
+      <div><dt id="vTotalLabel" class="text-sm text-asphalt/70">Estimated total</dt><dd id="vTotal" class="font-display text-xl font-extrabold"></dd></div>
+      <div><dt class="text-sm text-asphalt/70">Pickup</dt><dd id="vStart" class="font-display text-xl font-extrabold"></dd></div>
+      <div><dt class="text-sm text-asphalt/70">Return</dt><dd id="vEnd" class="font-display text-xl font-extrabold"></dd></div>
+    </dl>
+
+    <div id="termsBar" class="mt-6 hidden rounded-lg bg-white p-4 text-sm">
+      <p class="font-semibold">You haven't accepted the rental terms for this booking yet.</p>
+      <button id="acceptBtn" class="mt-3 rounded bg-teal px-4 py-2 font-semibold text-white hover:brightness-110">I accept the terms and conditions</button>
+    </div>
+
+    <section id="change" class="mt-6 hidden rounded-lg bg-white p-6">
+      <h2 class="font-display text-xl font-bold">Change dates</h2>
+      <p id="approvedWarn" class="mt-2 hidden text-sm text-brick">This booking is approved. If you change the dates, staff must approve it again.</p>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <label class="text-sm font-semibold">Pickup<input type="date" id="n_start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+        <label class="text-sm font-semibold">Return<input type="date" id="n_end" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      </div>
+      <p id="avail" class="mt-4 rounded bg-concrete p-3 text-sm font-semibold" aria-live="polite"></p>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button id="save" class="rounded bg-teal px-4 py-2.5 font-semibold text-white hover:brightness-110 disabled:opacity-40" disabled>Save new dates</button>
+        <button id="cancelBtn" class="rounded border border-brick px-4 py-2.5 font-semibold text-brick hover:bg-brick/10">Cancel this rental</button>
+      </div>
+    </section>
+    <h2 class="mt-10 font-display text-2xl font-extrabold">Rental record</h2>
+    <div id="rec" class="mt-4"></div>
+  </div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script><script src="js/record.js"></script>
+<script>
+layout(); Auth.require(['CUSTOMER']);
+const id = new URLSearchParams(location.search).get('id');
+const showErr = m => { err.textContent = m; err.classList.remove('hidden'); };
+let rental = null, ok = false;
+
+function draw() {
+  title.textContent = rental.vehicle; badgeBox.innerHTML = badge(rental.status);
+  vId.textContent = '#' + rental.id; vStart.textContent = rental.start; vEnd.textContent = rental.end; vTotal.textContent = money(rental.total);
+  vTotalLabel.textContent = ['COMPLETED', 'ACTIVE'].includes(rental.status) ? 'Total' : 'Estimated total';
+  const msg = {
+    PENDING: 'Waiting for staff approval.',
+    APPROVED: 'Approved. Bring your driver\'s license when you pick up the car.',
+    ACTIVE: 'The car is with you. Return it by the return date to avoid a late fee.',
+    COMPLETED: 'This rental is complete.',
+    REJECTED: 'Staff could not approve this booking.' + (rental.reason ? ' Reason: ' + rental.reason : ''),
+    CANCELLED: 'This booking was cancelled.' + (rental.reason ? ' Reason: ' + rental.reason : '')
+  }[rental.status];
+  note.textContent = msg || ''; note.classList.toggle('hidden', !msg);
+  const editable = ['PENDING', 'APPROVED'].includes(rental.status);
+  change.classList.toggle('hidden', !editable);
+  approvedWarn.classList.toggle('hidden', rental.status !== 'APPROVED');
+  if (editable) { n_start.min = n_end.min = new Date().toISOString().slice(0, 10); n_start.value = rental.start; n_end.value = rental.end; check(); }
+  box.classList.remove('hidden');
+}
+
+const valid = () => n_start.value && n_end.value && n_end.value > n_start.value;
+const unchanged = () => n_start.value === rental.start && n_end.value === rental.end;
+async function check() {
+  ok = false; save.disabled = true;
+  if (!valid()) { avail.textContent = 'Choose a pickup date and a later return date.'; return; }
+  if (unchanged()) { avail.textContent = 'These are your current dates.'; return; }
+  avail.textContent = 'Checking…';
+  try {
+    const a = await API.get('/rentals/' + id + '/availability?start=' + n_start.value + '&end=' + n_end.value);
+    ok = a.available;
+    avail.textContent = ok ? 'Available for your new dates.' : (a.reason || 'Not available for those dates.');
+    save.disabled = !ok;
+  } catch (e) { avail.textContent = e.message; }
+}
+n_start.onchange = n_end.onchange = check;
+
+save.onclick = async () => {
+  if (rental.status === 'APPROVED' && !confirm('Staff will need to approve the new dates again. Continue?')) return;
+  save.disabled = true;
+  try { await API.put('/rentals/' + id, { start: n_start.value, end: n_end.value }); toast('Dates updated'); await load(); }
+  catch (e) { toast(e.message, true); check(); }
+};
+cancelBtn.onclick = async () => {
+  if (!confirm('Cancel this rental?')) return;
+  try { await API.post('/rentals/' + id + '/cancel'); toast('Rental cancelled'); await load(); } catch (e) { toast(e.message, true); }
+};
+
+async function load() {
+  try {
+    rental = await API.get('/rentals/' + id); draw();
+    const r = await API.get('/rentals/' + id + '/record');
+    rec.innerHTML = renderRecord(r);
+    termsBar.classList.toggle('hidden', r.terms.accepted || ['CANCELLED', 'REJECTED'].includes(r.status));
+  } catch (e) { showErr(e.message); }
+}
+acceptBtn.onclick = async () => {
+  try { await API.post('/rentals/' + id + '/terms/accept'); toast('Terms accepted'); load(); } catch (e) { toast(e.message, true); }
+};
+if (!/^\d+$/.test(id || '')) showErr('No booking selected.'); else load();
+</script></body></html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html><html lang="en"><head><title>My damage fees – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-4xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">My damage fees</h1>
+  <p class="mt-1 text-asphalt/70">Damage found when a car came back, what it costs, and where your dispute stands. You can check the before and after photos on each rental's inspection page.</p>
+  <div id="list" class="mt-6 grid gap-4" aria-live="polite"></div>
+  <p id="empty" class="mt-6 hidden rounded-lg bg-white p-6">You have no damage fees. Good driving!</p>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout(); Auth.require(['CUSTOMER']);
+const METHODS = ['GCash', 'Maya', 'Card', 'Bank Transfer', 'Cash'];
+const field = 'mt-1 rounded border border-asphalt/25 bg-white px-3 py-1.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30';
+const MSG = {
+  ASSESSED: 'Please pay this fee, or dispute it if you disagree.',
+  DISPUTED: 'Staff are reviewing your dispute. You will be notified of the decision.',
+  PAID: 'Paid. Thank you.', WAIVED: 'This fee was waived. Nothing to pay.'
+};
+async function load() {
+  try {
+    const fees = await API.get('/damage-fees/me');
+    empty.classList.toggle('hidden', fees.length > 0);
+    list.innerHTML = fees.map(f => {
+      const left = Number(f.amount) - Number(f.paid || 0);
+      return `<article class="rounded-lg bg-white p-6">
+        <div class="flex flex-wrap items-start justify-between gap-2"><div><h2 class="font-display text-lg font-bold">${esc(f.vehicle)}</h2>
+          <p class="text-sm text-asphalt/70">Rental #${f.rentalId} · assessed ${esc(dt(f.assessedAt))}</p></div>${badge(f.status)}</div>
+        <p class="mt-3 text-sm">${esc(f.description)}</p>
+        <p class="mt-3 font-display text-2xl font-extrabold">${money(f.amount)}${Number(f.paid) > 0 ? `<span class="ml-2 text-sm font-normal text-asphalt/70">paid ${money(f.paid)}</span>` : ''}</p>
+        <p class="mt-1 text-sm text-asphalt/70">${MSG[f.status] || ''}</p>
+        ${f.disputeReason ? `<p class="mt-3 rounded bg-concrete p-3 text-sm"><span class="font-semibold">Your dispute:</span> ${esc(f.disputeReason)}</p>` : ''}
+        ${f.resolutionNotes ? `<p class="mt-2 rounded bg-concrete p-3 text-sm"><span class="font-semibold">Decision from staff:</span> ${esc(f.resolutionNotes)}</p>` : ''}
+        <div class="mt-4 flex flex-wrap items-end gap-4 text-sm">
+          <a href="inspection.html?id=${f.rentalId}" class="font-semibold text-teal underline">View inspection &amp; photos</a>
+          ${f.status === 'ASSESSED' && !f.resolutionNotes ? `<button data-dispute="${f.id}" class="font-semibold text-brick underline">Dispute this fee</button>` : ''}
+        </div>
+        ${f.status === 'ASSESSED' && left > 0 ? `<form data-pay="${f.id}" data-left="${left}" class="mt-4 flex flex-wrap items-end gap-3 text-sm">
+          <label class="font-semibold">Pay with<select name="method" class="${field} block">${METHODS.map(m => `<option>${m}</option>`).join('')}</select></label>
+          <label class="font-semibold">Reference no.<input name="ref" maxlength="100" class="${field} block"></label>
+          <button class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Pay ${money(left)}</button></form>` : ''}
+      </article>`;
+    }).join('');
+  } catch (e) { toast(e.message, true); }
+}
+list.onclick = async e => {
+  const b = e.target.closest('[data-dispute]'); if (!b) return;
+  const reason = prompt('Why do you disagree with this fee? Staff will review it and reply here.');
+  if (reason === null) return;
+  if (!reason.trim()) return toast('Please give a reason.', true);
+  try { await API.post('/damage-fees/' + b.dataset.dispute + '/dispute', { reason: reason.trim() }); toast('Dispute sent'); load(); }
+  catch (err) { toast(err.message, true); }
+};
+list.onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  try {
+    await API.post('/payments', { damageFeeId: Number(f.dataset.pay), amount: Number(f.dataset.left), method: f.elements.method.value, referenceNumber: f.elements.ref.value.trim() || null });
+    toast('Payment submitted. Staff will confirm it.'); load();
+  } catch (err) { toast(err.message, true); }
+};
+load();
+</script></body></html>

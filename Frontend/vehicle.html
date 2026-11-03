@@ -1,0 +1,121 @@
+<!DOCTYPE html><html lang="en"><head><title>Vehicle – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <a href="admin.html" class="text-sm font-semibold text-teal underline">&larr; All vehicles</a>
+  <div class="mt-4 flex items-center justify-between gap-3"><h1 id="title" class="font-display text-3xl font-extrabold">Vehicle</h1><span id="badgeBox"></span></div>
+  <p id="err" class="mt-4 hidden font-semibold text-brick"></p>
+
+  <form id="form" class="mt-6 rounded-lg bg-white p-6">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <label class="text-sm font-semibold">Vehicle type<select id="f_cat" required class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></select></label>
+      <label class="text-sm font-semibold">Plate number<input id="f_plate" required maxlength="30" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Make<input id="f_make" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Model<input id="f_model" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Year<input id="f_year" type="number" min="1900" max="2100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Color<input id="f_color" maxlength="50" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Seating capacity<input id="f_seats" type="number" min="1" max="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Mileage (km)<input id="f_mileage" type="number" min="0" step="0.1" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Fuel type<input id="f_fuel" list="fuels" maxlength="50" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"><datalist id="fuels"><option>Gasoline</option><option>Diesel</option><option>Hybrid</option><option>Electric</option></datalist></label>
+      <label class="text-sm font-semibold">Rate adjustment per day (added to the daily rate of the type)<input id="f_adj" type="number" step="0.01" placeholder="0" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"></label>
+      <label id="statusRow" class="hidden text-sm font-semibold">Status<select id="f_status" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:bg-concrete disabled:text-asphalt/70"><option value="Available">Available</option><option value="Maintenance">Maintenance</option><option value="Retired">Retired (hidden from customers)</option></select></label>
+    </div>
+    <div id="actions" class="mt-6 flex flex-wrap gap-3">
+      <button id="saveBtn" class="rounded bg-asphalt px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal">Save</button>
+      <button type="button" id="delBtn" class="hidden rounded border border-brick px-5 py-2.5 text-sm font-semibold text-brick hover:bg-brick/10">Delete vehicle</button>
+    </div>
+  </form>
+
+  <section id="history_" class="hidden">
+    <div id="rentalBlock">
+      <h2 class="mt-10 font-display text-xl font-bold">Rental history</h2>
+      <div class="mt-3 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
+        <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">#</th><th class="p-4">Customer</th><th class="p-4">Pickup</th><th class="p-4">Return by</th><th class="p-4">Total</th><th class="p-4">Status</th></tr></thead>
+        <tbody id="rRows"></tbody></table></div>
+      <p id="rEmpty" class="mt-3 hidden">No rentals yet.</p>
+    </div>
+    <h2 class="mt-10 font-display text-xl font-bold">Maintenance history</h2>
+    <div class="mt-3 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Date</th><th class="p-4">Type</th><th class="p-4">Description</th><th class="p-4">Cost</th><th class="p-4">Status</th></tr></thead>
+      <tbody id="mRows"></tbody></table></div>
+    <p id="mEmpty" class="mt-3 hidden">No maintenance records.</p>
+  </section>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+const canEdit = ['ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const canSeeRentals = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const idParam = new URLSearchParams(location.search).get('id');
+const adding = !idParam || idParam === 'new';
+if (adding && !canEdit) location.href = 'admin.html';
+const cap = s => s.charAt(0) + s.slice(1).toLowerCase();
+const num = x => String(x).trim() === '' ? null : Number(x);
+const show = m => { err.textContent = m; err.classList.remove('hidden'); toast(m, true); };
+
+function fill(v) {
+  title.textContent = v.make + ' ' + v.model + ' · ' + v.plateNumber; badgeBox.innerHTML = badge(v.status);
+  if (![...f_cat.options].some(o => o.value == v.categoryId)) f_cat.add(new Option(v.category, v.categoryId));
+  f_cat.value = v.categoryId; f_plate.value = v.plateNumber; f_make.value = v.make; f_model.value = v.model;
+  f_year.value = v.year ?? ''; f_color.value = v.color ?? ''; f_seats.value = v.seatingCapacity ?? ''; f_mileage.value = v.mileage ?? '';
+  f_fuel.value = v.fuelType ?? ''; f_adj.value = v.unitRateAdjustment ?? 0;
+  const st = cap(v.status);
+  if (![...f_status.options].some(o => o.value === st)) f_status.add(new Option(st, st));   // e.g. Rented: shown but locked
+  f_status.value = st; f_status.disabled = !canEdit || v.status === 'RENTED';
+}
+
+async function loadHistory() {
+  try {
+    const [m, r] = await Promise.all([API.get('/admin/maintenance?vehicleId=' + idParam),
+      canSeeRentals ? API.get('/admin/vehicles/' + idParam + '/rentals') : Promise.resolve(null)]);
+    history_.classList.remove('hidden');
+    mEmpty.classList.toggle('hidden', m.length > 0);
+    mRows.innerHTML = m.map(x => `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4">${esc(x.maintenanceDate)}</td><td class="p-4">${esc(x.maintenanceType)}</td>
+      <td class="p-4">${esc(x.description || '—')}</td><td class="p-4">${x.cost == null ? '—' : money(x.cost)}</td><td class="p-4">${badge(x.status)}</td></tr>`).join('');
+    rentalBlock.classList.toggle('hidden', r === null);
+    if (r) {
+      rEmpty.classList.toggle('hidden', r.length > 0);
+      rRows.innerHTML = r.map(x => `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4">${x.id}</td><td class="p-4">${esc(x.customer)}</td>
+        <td class="p-4">${esc(dt(x.pickup))}</td><td class="p-4">${esc(dt(x.returnBy))}</td><td class="p-4">${money(x.total || 0)}</td><td class="p-4">${badge(x.status)}</td></tr>`).join('');
+    }
+  } catch (e) { toast(e.message, true); }
+}
+
+form.onsubmit = async e => {
+  e.preventDefault();
+  const body = { categoryId: Number(f_cat.value) || null, plateNumber: f_plate.value, make: f_make.value, model: f_model.value, year: num(f_year.value),
+    color: f_color.value, seatingCapacity: num(f_seats.value), mileage: num(f_mileage.value), fuelType: f_fuel.value,
+    unitRateAdjustment: num(f_adj.value), status: adding ? null : f_status.value };
+  saveBtn.disabled = true;
+  try {
+    if (adding) { const v = await API.post('/admin/vehicles', body); toast('Vehicle added'); location.href = 'vehicle.html?id=' + v.id; return; }
+    fill(await API.put('/admin/vehicles/' + idParam, body)); toast('Vehicle saved'); err.classList.add('hidden');
+  } catch (er) { show(er.message); }
+  saveBtn.disabled = false;
+};
+
+delBtn.onclick = async () => {
+  if (!confirm('Delete this vehicle permanently? This cannot be undone.')) return;
+  try { await API.del('/admin/vehicles/' + idParam); toast('Vehicle deleted'); setTimeout(() => location.href = 'admin.html', 600); }
+  catch (er) { show(er.message); }
+};
+
+(async () => {
+  try {
+    const cats = await API.get('/categories');
+    f_cat.innerHTML = '<option value="">Choose a type</option>' + cats.map(c => `<option value="${Number(c.id)}">${esc(c.name)}</option>`).join('');
+    if (adding) { title.textContent = 'Add vehicle'; f_adj.value = 0; return; }
+    const v = await API.get('/admin/vehicles/' + idParam);
+    statusRow.classList.remove('hidden');
+    fill(v);
+    if (!canEdit) { for (const el of form.querySelectorAll('input,select')) el.disabled = true; actions.classList.add('hidden'); }
+    else delBtn.classList.remove('hidden');
+    loadHistory();
+  } catch (er) { show(er.message); form.classList.add('hidden'); }
+})();
+</script></body></html>

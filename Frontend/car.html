@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="en"><head><title>Car details – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <a id="back" href="vehicles.html" class="text-sm font-semibold text-teal underline">&larr; Back to all cars</a>
+  <p id="err" class="mt-6 hidden font-semibold text-brick"></p>
+
+  <div id="carBox" class="mt-4 hidden grid gap-8 lg:grid-cols-3">
+    <div class="lg:col-span-2">
+      <div class="flex h-56 items-center justify-center rounded-lg bg-white font-display text-6xl font-extrabold text-asphalt/15 sm:h-72 sm:text-8xl"><span id="hero"></span></div>
+
+      <div class="mt-6 flex flex-wrap items-start justify-between gap-3">
+        <div><h1 id="title" class="font-display text-4xl font-extrabold"></h1><p id="sub" class="mt-1 text-asphalt/70"></p></div>
+        <span id="badgeBox"></span>
+      </div>
+      <p id="desc" class="mt-4 text-lg"></p>
+
+      <h2 class="mt-8 font-display text-xl font-bold">Specifications</h2>
+      <div id="specs" class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3"></div>
+
+      <h2 class="mt-8 font-display text-xl font-bold">Before you book</h2>
+      <ul class="mt-3 list-disc space-y-2 pl-5">
+        <li>You need a <strong>verified driver's license</strong> that is still valid on the last day of your rental. Upload it from <a href="profile.html#license" class="font-semibold text-teal underline">My profile</a> after you register so staff can verify it.</li>
+        <li>Your request is <strong>reviewed by our staff</strong>. The car is yours once it is approved.</li>
+        <li>The total shown is an estimate: the daily rate times the number of days.</li>
+        <li>Returning late adds a late fee, charged at your booked daily rate for each started 24 hours after a short grace period.</li>
+        <li>You can change the dates or cancel a rental from <a href="dashboard.html" class="font-semibold text-teal underline">My rentals</a> while it is still pending or approved. Changing the dates of an approved rental sends it back to staff for approval.</li>
+      </ul>
+    </div>
+
+    <aside class="lg:col-span-1">
+      <div class="rounded-lg bg-white p-6 lg:sticky lg:top-6">
+        <p><span id="rate" class="font-display text-4xl font-extrabold"></span><span class="text-asphalt/70"> per day</span></p>
+        <div class="mt-5 grid gap-4">
+          <label class="text-sm font-semibold">Pickup<input type="date" id="bk_start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+          <label class="text-sm font-semibold">Return<input type="date" id="bk_end" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+        </div>
+        <p id="avail" class="mt-4 rounded bg-concrete p-3 text-sm font-semibold" aria-live="polite">Choose your dates to see if this car is free.</p>
+        <dl id="sum" class="mt-4 hidden space-y-2 text-sm">
+          <div class="flex justify-between"><dt id="sumDays"></dt><dd id="sumRate"></dd></div>
+          <div class="flex justify-between border-t border-asphalt/15 pt-2 text-base"><dt class="font-bold">Estimated total</dt><dd id="sumTotal" class="font-display text-xl font-extrabold"></dd></div>
+        </dl>
+        <div class="mt-4 text-sm">
+          <details><summary class="cursor-pointer font-semibold text-teal">Rental terms and conditions</summary><p id="termsText" class="mt-2 whitespace-pre-line"></p></details>
+          <label class="mt-2 flex items-start gap-2"><input type="checkbox" id="termsOk" class="mt-1"> <span>I have read and accept the rental terms and conditions.</span></label>
+        </div>
+        <details class="mt-4 text-sm"><summary class="cursor-pointer font-semibold text-teal">Dates already taken</summary><ul id="taken" class="mt-2 list-disc space-y-1 pl-5"></ul></details>
+        <button id="reserve" class="mt-5 w-full rounded bg-teal px-4 py-3 font-semibold text-white hover:brightness-110 disabled:opacity-40" disabled>Reserve this car</button>
+      </div>
+    </aside>
+  </div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const params = new URLSearchParams(location.search);
+const carId = params.get('id');
+const today = new Date().toISOString().slice(0, 10);
+bk_start.min = bk_end.min = today;
+bk_start.value = params.get('start') || ''; bk_end.value = params.get('end') || '';
+let car = null, free = null, why = '';
+
+const tile = (label, value) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${label}</p><p class="mt-1 font-display text-xl font-extrabold">${esc(value ?? '—')}</p></div>`;
+const validDates = () => bk_start.value && bk_end.value && bk_end.value > bk_start.value;
+const showErr = m => { err.textContent = m; err.classList.remove('hidden'); };
+
+function draw() {
+  if (!car) return;
+  const rentable = !['MAINTENANCE', 'RETIRED'].includes(car.status);
+  sum.classList.add('hidden'); reserve.disabled = true;
+  if (!rentable) { avail.textContent = 'This car is not available for rent right now.'; return; }
+  if (!validDates()) { avail.textContent = 'Choose a pickup date and a later return date to see if this car is free.'; return; }
+  if (free === false) { avail.textContent = (why || 'Not available for ' + bk_start.value + ' to ' + bk_end.value + '. Try other dates.'); return; }
+  const d = daysBetween(bk_start.value, bk_end.value);
+  avail.textContent = 'Available for your dates.';
+  sumDays.textContent = d + (d === 1 ? ' day' : ' days'); sumRate.textContent = money(car.dailyRate) + ' per day';
+  sumTotal.textContent = money(d * car.dailyRate); sum.classList.remove('hidden'); reserve.disabled = !termsOk.checked;
+}
+
+async function load() {
+  try {
+    car = await API.get('/vehicles/' + carId + (validDates() ? '?start=' + bk_start.value + '&end=' + bk_end.value : ''));
+    free = validDates() ? car.availableForDates : null;
+    document.title = car.make + ' ' + car.model + ' – Byahe Rentals';
+    hero.textContent = car.category; title.textContent = car.make + ' ' + car.model;
+    sub.textContent = [car.year, car.category].filter(Boolean).join(' · ');
+    badgeBox.innerHTML = badge(car.status); desc.textContent = car.categoryDescription || '';
+    specs.innerHTML = tile('Type', car.category) + tile('Year', car.year) + tile('Seats', car.seats ? car.seats + ' seats' : null)
+      + tile('Fuel', car.fuel) + tile('Color', car.color) + tile('Daily rate', money(car.dailyRate));
+    rate.textContent = money(car.dailyRate);
+    carBox.classList.remove('hidden'); draw();
+    API.get('/vehicles/' + carId + '/availability').then(a => drawTaken(a.booked)).catch(() => {});
+  } catch (e) { showErr(e.message); toast(e.message, true); }
+}
+
+async function onDates() {
+  if (!car) return;
+  free = null; draw();
+  if (!validDates()) return;
+  try {
+    const a = await API.get('/vehicles/' + carId + '/availability?start=' + bk_start.value + '&end=' + bk_end.value);
+    free = a.available; why = a.reason || ''; drawTaken(a.booked);
+  } catch (e) { toast(e.message, true); }
+  draw();
+}
+
+const fmt = d => new Date(d + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+function drawTaken(list) {
+  taken.innerHTML = list.length
+    ? list.map(b => '<li>' + esc(b.kind === 'MAINTENANCE' ? 'Maintenance: ' + fmt(b.start) : fmt(b.start) + ' to ' + fmt(b.end)) + '</li>').join('')
+    : '<li>No upcoming bookings. Any dates are open.</li>';
+}
+bk_start.onchange = bk_end.onchange = onDates;
+termsOk.onchange = draw;
+API.get('/terms').then(t => { termsText.textContent = t.text; }).catch(() => {});
+
+reserve.onclick = async () => {
+  if (!Auth.user()) return location.href = 'login.html?next=' + encodeURIComponent('car.html?' + new URLSearchParams({ id: carId, start: bk_start.value, end: bk_end.value }));
+  if (Auth.user().role !== 'CUSTOMER') return toast('Only customer accounts can reserve a car.', true);
+  if (!confirm('Reserve the ' + car.make + ' ' + car.model + ' from ' + bk_start.value + ' to ' + bk_end.value + '?')) return;
+  reserve.disabled = true;
+  try { await API.post('/rentals', { vehicleId: car.id, start: bk_start.value, end: bk_end.value, acceptTerms: termsOk.checked }); location.href = 'dashboard.html'; }
+  catch (e) { toast(e.message, true); reserve.disabled = false; }
+};
+
+if (!/^\d+$/.test(carId || '')) showErr('No car selected.'); else load();
+</script></body></html>

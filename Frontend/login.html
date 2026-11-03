@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><title>Log in – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-md px-5 py-14">
+  <h1 id="title" class="font-display text-3xl font-extrabold">Log in</h1>
+  <form id="form" class="mt-6 space-y-4 rounded-lg bg-white p-6">
+    <label id="nameRow" class="hidden text-sm font-semibold">Full name<input id="name" autocomplete="name" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label id="phoneRow" class="hidden text-sm font-semibold">Mobile number<input id="phone" type="tel" autocomplete="tel" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="block text-sm font-semibold">Email<input required type="email" id="email" autocomplete="email" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="block text-sm font-semibold">Password<input required minlength="8" type="password" id="password" autocomplete="current-password" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <button id="submit" class="w-full rounded bg-asphalt py-3 font-semibold text-white hover:bg-teal">Log in</button>
+    <p class="text-center text-sm"><span id="swapText">New here?</span> <button type="button" id="swap" class="font-semibold text-teal underline">Create an account</button></p>
+    <p id="hint" class="text-xs text-asphalt/60" aria-live="polite"></p>
+  </form>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+// 'name' is already a built-in window property, so the Full name box is looked up under a different name.
+const nameInput = document.getElementById('name');
+let register = false;
+if (CONFIG.USE_MOCK) hint.textContent = 'Sample data mode: any email works. Use "staff@" or "admin@" in the email to see the fleet page.';
+swap.onclick = () => {
+  register = !register;
+  title.textContent = submit.textContent = register ? 'Create account' : 'Log in';
+  for (const r of [nameRow, phoneRow]) { r.classList.toggle('hidden', !register); r.classList.toggle('block', register); }
+  nameInput.required = phone.required = register;
+  swapText.textContent = register ? 'Already registered?' : 'New here?';
+  swap.textContent = register ? 'Log in' : 'Create an account';
+  password.autocomplete = register ? 'new-password' : 'current-password';
+  hint.textContent = register ? 'Use at least 8 characters, with a letter and a number. We will email you a link to confirm your address.' : '';
+};
+form.onsubmit = async e => {
+  e.preventDefault(); submit.disabled = true;
+  try {
+    const data = await API.post(register ? '/auth/register' : '/auth/login', { name: nameInput.value, phone: phone.value, email: email.value, password: password.value });
+    if (register) {            // new accounts must confirm their email before they can log in
+      password.value = ''; swap.click();
+      hint.textContent = data.message; toast(data.message);
+      submit.disabled = false; return;
+    }
+    Auth.login(data);
+    const next = new URLSearchParams(location.search).get('next');
+    location.href = next && /^[\w.\-?=&%]+$/.test(next) ? next : (data.user.role === 'CUSTOMER' ? 'dashboard.html' : 'overview.html');
+  } catch (err) { toast(err.message, true); submit.disabled = false; }
+};
+</script></body></html>

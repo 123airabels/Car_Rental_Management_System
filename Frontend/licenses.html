@@ -1,0 +1,142 @@
+<!DOCTYPE html><html lang="en"><head><title>License review – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">Driver's licenses</h1>
+  <p class="mt-1 text-sm text-asphalt/70">Check the photos against the details the customer typed in, then verify or reject. Customers can't have a booking approved without a verified license.</p>
+  <p id="who" class="mt-3 hidden text-sm font-semibold">Showing one customer. <a href="licenses.html" class="text-teal underline">Show everyone</a></p>
+
+  <div id="tabs" class="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Filter by status"></div>
+
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Customer</th><th class="p-4">License no.</th><th class="p-4">Type</th><th class="p-4">Issued</th><th class="p-4">Expires</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-4 hidden">No licenses in this list.</p>
+</main>
+
+<!-- Review dialog -->
+<div id="modal" class="fixed inset-0 z-40 hidden items-start justify-center overflow-y-auto bg-asphalt/60 p-4" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="my-6 w-full max-w-3xl rounded-lg bg-white p-6">
+    <div class="flex items-start justify-between gap-3">
+      <div><h2 id="mtitle" class="font-display text-xl font-extrabold"></h2><p id="msub" class="mt-1 text-sm text-asphalt/70"></p></div>
+      <span id="mstatus"></span>
+    </div>
+    <dl id="mdetails" class="mt-4 grid gap-4 text-sm sm:grid-cols-4"></dl>
+    <p id="mwarn" class="mt-4 hidden rounded bg-brick/10 p-3 text-sm font-semibold text-brick"></p>
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <figure><figcaption class="mb-1 text-xs font-semibold text-asphalt/70">Front (click to open full size)</figcaption>
+        <a id="pFront" href="#" target="_blank" rel="noopener" class="flex min-h-48 items-center justify-center overflow-hidden rounded border border-asphalt/15 bg-concrete text-sm text-asphalt/60">Loading…</a></figure>
+      <figure><figcaption class="mb-1 text-xs font-semibold text-asphalt/70">Back (click to open full size)</figcaption>
+        <a id="pBack" href="#" target="_blank" rel="noopener" class="flex min-h-48 items-center justify-center overflow-hidden rounded border border-asphalt/15 bg-concrete text-sm text-asphalt/60">Loading…</a></figure>
+    </div>
+
+    <div id="decision" class="mt-5 hidden">
+      <label class="block text-sm font-semibold" for="reason">Reason (required if you reject; the customer will see it)</label>
+      <textarea id="reason" rows="2" maxlength="500" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></textarea>
+      <div id="chips" class="mt-2 flex flex-wrap gap-2 text-xs"></div>
+    </div>
+    <p id="reviewed" class="mt-5 hidden text-sm text-asphalt/70"></p>
+
+    <div class="mt-6 flex flex-wrap justify-end gap-3">
+      <button id="mClose" type="button" class="rounded border border-asphalt/25 px-4 py-2 font-semibold">Close</button>
+      <button id="mReject" type="button" class="hidden rounded bg-brick px-4 py-2 font-semibold text-white hover:brightness-110 disabled:opacity-40">Reject</button>
+      <button id="mVerify" type="button" class="hidden rounded bg-teal px-4 py-2 font-semibold text-white hover:brightness-110 disabled:opacity-40">Verify license</button>
+    </div>
+  </div>
+</div>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+Auth.require(['STAFF', 'ADMIN', 'SYSTEM_ADMIN']);   // Finance can't review licenses (the API refuses them too)
+const params = new URLSearchParams(location.search);
+const onlyCustomer = /^\d+$/.test(params.get('customerId') || '') ? Number(params.get('customerId')) : null;
+const TABS = [['PENDING', 'Pending'], ['VERIFIED', 'Verified'], ['REJECTED', 'Rejected'], ['ALL', 'All']];
+const startTab = String(params.get('status') || '').toUpperCase();
+let tab = TABS.some(t => t[0] === startTab) ? startTab : (onlyCustomer ? 'ALL' : 'PENDING');
+let all = [], current = null, urls = [], seq = 0;
+const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const isExpired = l => String(l.expirationDate) < today;
+const REASONS = ['Photo is blurry or cut off', 'Details don\'t match the photo', 'License has expired', 'Photo of the back is missing or unreadable', 'Not a valid driver\'s license'];
+who.classList.toggle('hidden', !onlyCustomer);
+
+async function load() {
+  try {
+    all = await API.get('/admin/licenses');
+    if (onlyCustomer) all = all.filter(l => l.customerId === onlyCustomer);
+    draw();
+  } catch (e) { toast(e.message, true); }
+}
+function draw() {
+  const count = k => k === 'ALL' ? all.length : all.filter(l => l.status === k).length;
+  tabs.innerHTML = TABS.map(([k, t]) => `<button role="tab" aria-selected="${k === tab}" data-tab="${k}" class="rounded px-4 py-2 text-sm font-semibold ${k === tab ? 'bg-asphalt text-white' : 'bg-white hover:bg-asphalt/10'}">${t} (${count(k)})</button>`).join('');
+  const list = tab === 'ALL' ? all : all.filter(l => l.status === tab);
+  empty.classList.toggle('hidden', list.length > 0);
+  rows.innerHTML = list.map(l => `<tr class="border-b border-asphalt/10 last:border-0">
+    <td class="p-4 font-semibold"><a href="customer.html?id=${Number(l.customerId)}" class="hover:text-teal hover:underline">${esc(l.customer)}</a></td>
+    <td class="p-4">${esc(l.licenseNumber)}</td><td class="p-4">${esc(l.licenseType)}</td><td class="p-4">${esc(l.issueDate)}</td>
+    <td class="p-4">${esc(l.expirationDate)}${isExpired(l) ? ' <span class="rounded bg-brick/10 px-2 py-0.5 text-xs font-semibold text-brick">Expired</span>' : ''}</td>
+    <td class="p-4">${badge(l.status)}</td>
+    <td class="p-4 text-right"><button data-review="${Number(l.id)}" class="font-semibold text-teal underline">${l.status === 'PENDING' ? 'Review' : 'View'}</button></td></tr>`).join('');
+}
+tabs.onclick = e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; draw(); } };
+rows.onclick = e => { const b = e.target.closest('[data-review]'); if (b) openReview(Number(b.dataset.review)); };
+
+/* ---------- review dialog ---------- */
+function setPhoto(el, url, alt) {
+  if (!url) { el.removeAttribute('href'); el.textContent = 'Photo not available'; return; }
+  el.href = url; el.innerHTML = `<img src="${url}" alt="${alt}" class="max-h-80 w-full object-contain">`;
+}
+function freeUrls() { urls.forEach(u => URL.revokeObjectURL(u)); urls = []; }
+
+async function openReview(id) {
+  const l = all.find(x => x.id === id); if (!l) return;
+  current = l; const mine = ++seq;
+  mtitle.textContent = l.customer; msub.textContent = 'License #' + l.id + ' · customer #' + l.customerId;
+  mstatus.innerHTML = badge(l.status);
+  const d = (k, v) => `<div><dt class="text-asphalt/70">${k}</dt><dd class="font-semibold">${esc(v)}</dd></div>`;
+  mdetails.innerHTML = d('License number', l.licenseNumber) + d('Type', l.licenseType) + d('Issued', l.issueDate) + d('Expires', l.expirationDate);
+  const expired = isExpired(l), pending = l.status === 'PENDING';
+  mwarn.textContent = expired ? 'This license has expired, so it can only be rejected.' : '';
+  mwarn.classList.toggle('hidden', !(expired && pending));
+  decision.classList.toggle('hidden', !pending);
+  mVerify.classList.toggle('hidden', !pending); mReject.classList.toggle('hidden', !pending);
+  mVerify.disabled = expired; reason.value = '';
+  chips.innerHTML = REASONS.map(r => `<button type="button" data-chip="${esc(r)}" class="rounded-full border border-asphalt/25 px-3 py-1 hover:bg-asphalt/10">${esc(r)}</button>`).join('');
+  reviewed.classList.toggle('hidden', pending);
+  reviewed.textContent = pending ? '' : (l.status === 'REJECTED' ? 'Rejected' : 'Verified') + (l.verifiedAt ? ' on ' + dt(l.verifiedAt) : '') + (l.rejectionReason ? '. Reason: ' + l.rejectionReason : '.');
+  pFront.textContent = pBack.textContent = 'Loading…'; pFront.removeAttribute('href'); pBack.removeAttribute('href');
+  modal.classList.remove('hidden'); modal.classList.add('flex'); mClose.focus();
+  freeUrls();
+  const grab = async side => { try { const u = await API.blobUrl(`/license/${id}/photo/${side}`); if (mine !== seq) { URL.revokeObjectURL(u); return null; } urls.push(u); return u; } catch { return null; } };
+  const [f, b] = await Promise.all([grab('front'), grab('back')]);
+  if (mine !== seq) return;
+  setPhoto(pFront, f, 'Front of the license'); setPhoto(pBack, b, 'Back of the license');
+}
+function closeReview() { seq++; modal.classList.add('hidden'); modal.classList.remove('flex'); freeUrls(); current = null; }
+mClose.onclick = closeReview;
+modal.onclick = e => { if (e.target === modal) closeReview(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && current) closeReview(); });
+chips.onclick = e => { const c = e.target.closest('[data-chip]'); if (c) { reason.value = c.dataset.chip; reason.focus(); } };
+
+async function decide(path, body, okMsg) {
+  mVerify.disabled = mReject.disabled = true;
+  try { await API.post(`/admin/licenses/${current.id}/${path}`, body); closeReview(); toast(okMsg); await load(); }
+  catch (e) { toast(e.message, true); mReject.disabled = false; mVerify.disabled = current ? isExpired(current) : true; if (/already been reviewed/i.test(e.message)) { closeReview(); load(); } }
+}
+mVerify.onclick = () => {
+  if (!confirm('Verify this license for ' + current.customer + '? Make sure the photos match the details shown.')) return;
+  decide('verify', undefined, 'License verified');
+};
+mReject.onclick = () => {
+  if (!reason.value.trim()) { reason.focus(); return toast('Enter a reason so the customer knows what to fix.', true); }
+  decide('reject', { reason: reason.value.trim() }, 'License rejected');
+};
+load();
+</script></body></html>

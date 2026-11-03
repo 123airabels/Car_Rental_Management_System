@@ -1,0 +1,91 @@
+<!DOCTYPE html><html lang="en"><head><title>Customer – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <a href="customers.html" class="text-sm font-semibold text-teal underline">&larr; All customers</a>
+  <p id="err" class="mt-6 hidden font-semibold text-brick"></p>
+  <section id="detail" class="mt-6 hidden" aria-live="polite">
+    <div class="flex items-center justify-between gap-3"><h2 id="dName" class="font-display text-2xl font-extrabold"></h2><span id="dStatus"></span></div>
+    <p id="dMeta" class="mt-1 text-sm text-asphalt/70"></p>
+    <div id="dStats" class="mt-4 grid gap-4 sm:grid-cols-4"></div>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+      <form id="editForm" class="rounded-lg bg-white p-6 lg:col-span-2">
+        <h3 class="font-display text-lg font-bold">Contact details</h3>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <label class="text-sm font-semibold">First name<input id="eFirst" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+          <label class="text-sm font-semibold">Last name<input id="eLast" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+          <label class="text-sm font-semibold">Email (log-in, not editable)<input id="eEmail" readonly class="mt-1 w-full rounded border border-asphalt/15 bg-concrete px-3 py-2.5 text-asphalt/70"></label>
+          <label class="text-sm font-semibold">Phone<input id="ePhone" type="tel" required maxlength="30" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+          <label class="text-sm font-semibold sm:col-span-2">Address<textarea id="eAddress" rows="2" maxlength="500" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></textarea></label>
+        </div>
+        <button class="mt-4 rounded bg-asphalt px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal">Save contact details</button>
+      </form>
+      <div id="statusBox" class="hidden rounded-lg bg-white p-6">
+        <h3 class="font-display text-lg font-bold">Account status</h3>
+        <p class="mt-1 text-sm text-asphalt/70">Suspended customers cannot log in or book. Pending accounts have not confirmed their email yet.</p>
+        <select id="sSelect" aria-label="Account status" class="mt-4 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5"><option value="Active">Active</option><option value="Suspended">Suspended</option></select>
+        <button id="sSave" class="mt-3 rounded bg-asphalt px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal">Update status</button>
+      </div>
+    </div>
+
+    <h3 class="mt-8 font-display text-lg font-bold">Rental history</h3>
+    <div class="mt-3 overflow-x-auto rounded-lg bg-white">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">#</th><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return by</th><th class="p-4">Returned</th><th class="p-4">Total</th><th class="p-4">Late fee</th><th class="p-4">Paid</th><th class="p-4">Status</th></tr></thead>
+        <tbody id="hRows"></tbody>
+      </table>
+    </div>
+    <p id="hEmpty" class="mt-3 hidden">This customer has no rentals yet.</p>
+  </section>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['STAFF', 'ADMIN', 'SYSTEM_ADMIN']);
+const id = new URLSearchParams(location.search).get('id');
+let current = null;
+
+async function open(id) {
+  try {
+    const [d, h] = await Promise.all([API.get('/admin/customers/' + id), API.get('/admin/customers/' + id + '/rentals')]);
+    current = id;
+    const p = d.profile;
+    detail.classList.remove('hidden');
+    dName.textContent = p.firstName + ' ' + p.lastName; dStatus.innerHTML = badge(p.status);
+    dMeta.textContent = 'Customer #' + p.id + ' · joined ' + dt(p.createdAt).slice(0, 10);
+    eFirst.value = p.firstName; eLast.value = p.lastName; eEmail.value = p.email; ePhone.value = p.phone; eAddress.value = p.address || '';
+    statusBox.classList.toggle('hidden', !['ADMIN', 'SYSTEM_ADMIN'].includes(me.role));
+    sSelect.value = p.status === 'SUSPENDED' ? 'Suspended' : 'Active';
+    const stat = (l, v) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-2xl font-extrabold">${v}</p></div>`;
+    dStats.innerHTML = stat('Rentals', d.totalRentals) + stat('Completed', d.completedRentals) + stat('Total paid', money(d.totalPaid))
+      + stat('License', d.licenseStatus
+          ? badge(d.licenseStatus) + (d.licenseExpires ? `<span class="mt-1 block text-xs font-normal text-asphalt/70">expires ${esc(d.licenseExpires)}</span>` : '')
+            + `<a href="licenses.html?customerId=${Number(p.id)}" class="mt-1 block text-xs font-semibold text-teal underline">View license photos</a>`
+          : '<span class="text-base">None uploaded</span>');
+    hEmpty.classList.toggle('hidden', h.length > 0);
+    hRows.innerHTML = h.map(r => `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4">${r.id}</td>
+      <td class="p-4 font-semibold">${esc(r.vehicle)}<span class="block text-xs font-normal text-asphalt/70">${esc(r.plateNumber)}</span></td>
+      <td class="p-4">${esc(dt(r.pickup))}</td><td class="p-4">${esc(dt(r.returnBy))}</td><td class="p-4">${esc(dt(r.actualReturn))}</td>
+      <td class="p-4">${money(r.total || 0)}</td><td class="p-4">${money(r.lateFee || 0)}</td><td class="p-4">${money(r.paid || 0)}</td><td class="p-4">${badge(r.status)}</td></tr>`).join('');
+  } catch (e) { err.textContent = e.message; err.classList.remove('hidden'); toast(e.message, true); }
+}
+
+editForm.onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await API.put('/admin/customers/' + current, { firstName: eFirst.value, lastName: eLast.value, phone: ePhone.value, address: eAddress.value });
+    toast('Contact details saved'); open(current);
+  } catch (err) { toast(err.message, true); }
+};
+sSave.onclick = async () => {
+  if (!confirm('Set this account to ' + sSelect.value + '?')) return;
+  try { await API.post('/admin/customers/' + current + '/status', { status: sSelect.value }); toast('Status updated'); open(current); }
+  catch (err) { toast(err.message, true); }
+};
+if (!/^\d+$/.test(id || '')) { err.textContent = 'No customer selected.'; err.classList.remove('hidden'); } else open(id);
+</script></body></html>

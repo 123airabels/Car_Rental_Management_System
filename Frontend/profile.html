@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="en"><head><title>My profile – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">My profile</h1>
+  <section class="mt-6 rounded-lg bg-white p-6" aria-labelledby="pt">
+    <div class="flex items-center justify-between gap-3"><h2 id="pt" class="font-display text-xl font-bold">Contact details</h2><span id="pStatus"></span></div>
+    <p id="since" class="mt-1 text-sm text-asphalt/70"></p>
+    <form id="form" class="mt-5 grid gap-4 sm:grid-cols-2">
+      <label class="text-sm font-semibold">First name<input id="firstName" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold">Last name<input id="lastName" required maxlength="100" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold">Email (your log-in)<input id="email" readonly class="mt-1 w-full rounded border border-asphalt/15 bg-concrete px-3 py-2.5 text-asphalt/70"></label>
+      <label class="text-sm font-semibold">Mobile number<input id="phone" type="tel" required maxlength="30" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold sm:col-span-2">Address<textarea id="address" rows="2" maxlength="500" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></textarea></label>
+      <div class="sm:col-span-2"><button class="rounded bg-asphalt px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal">Save changes</button></div>
+    </form>
+  </section>
+  <section id="license" class="mt-6 rounded-lg bg-white p-6" aria-labelledby="lt">
+    <div class="flex items-center justify-between gap-3"><h2 id="lt" class="font-display text-xl font-bold">Driver's license</h2><span id="lStatus"></span></div>
+    <p class="mt-1 text-sm text-asphalt/70">You need a verified license, still valid on the last day of your rental, before staff can approve a booking.</p>
+    <div id="lInfo" class="mt-4" aria-live="polite"></div>
+    <form id="lForm" class="mt-5 hidden gap-4 sm:grid-cols-2" novalidate>
+      <h3 id="lFormTitle" class="font-display text-lg font-bold sm:col-span-2">Upload your license</h3>
+      <label class="text-sm font-semibold">License number<input id="lNumber" required maxlength="100" autocomplete="off" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold">License type
+        <select id="lType" required class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option>Non-Professional</option><option>Professional</option><option>Student Permit</option></select></label>
+      <label class="text-sm font-semibold">Issue date<input id="lIssue" type="date" required class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <label class="text-sm font-semibold">Expiration date<input id="lExpiry" type="date" required class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+      <div class="text-sm font-semibold">Front of license
+        <label class="mt-1 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-asphalt/25 bg-concrete p-3 text-center text-asphalt/70 hover:border-teal focus-within:border-teal">
+          <img id="lFrontPrev" alt="Preview of the front of your license" class="mb-2 hidden max-h-40 rounded">
+          <span id="lFrontName">Choose a JPG or PNG (max 5 MB)</span>
+          <input id="lFront" type="file" accept="image/jpeg,image/png" required class="sr-only"></label></div>
+      <div class="text-sm font-semibold">Back of license
+        <label class="mt-1 flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-asphalt/25 bg-concrete p-3 text-center text-asphalt/70 hover:border-teal focus-within:border-teal">
+          <img id="lBackPrev" alt="Preview of the back of your license" class="mb-2 hidden max-h-40 rounded">
+          <span id="lBackName">Choose a JPG or PNG (max 5 MB)</span>
+          <input id="lBack" type="file" accept="image/jpeg,image/png" required class="sr-only"></label></div>
+      <p class="text-xs text-asphalt/70 sm:col-span-2">Make sure all four corners and the text are visible and not blurry. Only you and our staff can see these photos.</p>
+      <div class="sm:col-span-2"><button id="lSubmit" class="rounded bg-asphalt px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal disabled:opacity-40">Submit for review</button></div>
+    </form>
+  </section>
+  <h2 class="mt-10 font-display text-xl font-bold">Rental history</h2>
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-4 hidden">You have no rentals yet. <a href="vehicles.html" class="font-semibold text-teal underline">Browse cars</a>.</p>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout(); Auth.require(['CUSTOMER']);
+function fill(p) {
+  firstName.value = p.firstName; lastName.value = p.lastName; email.value = p.email; phone.value = p.phone; address.value = p.address || '';
+  pStatus.innerHTML = badge(p.status); since.textContent = 'Member since ' + dt(p.createdAt).slice(0, 10);
+}
+form.onsubmit = async e => {
+  e.preventDefault();
+  try {
+    fill(await API.put('/account/profile', { firstName: firstName.value, lastName: lastName.value, phone: phone.value, address: address.value }));
+    toast('Profile saved');
+  } catch (err) { toast(err.message, true); }
+};
+(async () => {
+  try {
+    fill(await API.get('/account/profile'));
+    const list = await API.get('/rentals/me');
+    empty.classList.toggle('hidden', list.length > 0);
+    rows.innerHTML = list.map(r => `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4 font-semibold">${esc(r.vehicle)}</td>
+      <td class="p-4">${esc(r.start)}</td><td class="p-4">${esc(r.end)}</td><td class="p-4">${money(r.total)}</td><td class="p-4">${badge(r.status)}</td></tr>`).join('');
+  } catch (err) { toast(err.message, true); }
+})();
+
+/* ---------- driver's license ---------- */
+const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const MAX_IMG = 5 * 1024 * 1024;
+const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+lIssue.max = localToday(); lExpiry.min = tomorrow();
+
+function wirePicker(input, img, label) {
+  input.onchange = () => {
+    const f = input.files[0];
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.classList.add('hidden'); img.removeAttribute('src');
+    label.textContent = 'Choose a JPG or PNG (max 5 MB)';
+    if (!f) return;
+    if (!['image/jpeg', 'image/png'].includes(f.type)) { input.value = ''; return toast('Only JPG or PNG images are accepted.', true); }
+    if (f.size > MAX_IMG) { input.value = ''; return toast('Each image must be 5 MB or smaller.', true); }
+    img.src = URL.createObjectURL(f); img.classList.remove('hidden'); label.textContent = f.name + ' (tap to change)';
+  };
+}
+wirePicker(lFront, lFrontPrev, lFrontName); wirePicker(lBack, lBackPrev, lBackName);
+
+function photoTile(id, side, title) {
+  return `<figure><figcaption class="mb-1 text-xs font-semibold text-asphalt/70">${title}</figcaption>
+    <a data-photo="${side}" href="#" target="_blank" rel="noopener" class="flex h-32 items-center justify-center overflow-hidden rounded border border-asphalt/15 bg-concrete text-xs text-asphalt/60">Loading…</a></figure>`;
+}
+async function loadPhotos(id) {
+  for (const side of ['front', 'back']) {
+    const a = lInfo.querySelector(`[data-photo="${side}"]`);
+    try {
+      const url = await API.blobUrl(`/license/${id}/photo/${side}`);
+      a.href = url; a.innerHTML = `<img src="${url}" alt="${side} of your license" class="h-full w-full object-cover">`;
+    } catch { a.removeAttribute('href'); a.textContent = 'Photo not available'; }
+  }
+}
+
+async function loadLicense() {
+  const list = await API.get('/license/me');
+  const l = list[0];
+  const expired = l && l.expirationDate < localToday();
+  lStatus.innerHTML = l ? badge(l.status) : '<span class="text-sm text-asphalt/60">Not uploaded</span>';
+  if (!l) {
+    lInfo.innerHTML = '<p class="rounded bg-concrete p-3 text-sm">You haven\'t uploaded a license yet. Add one below so staff can verify it.</p>';
+  } else {
+    const note = l.status === 'PENDING' ? '<p class="rounded bg-concrete p-3 text-sm font-semibold">Waiting for staff review. You\'ll get a notification once it\'s decided.</p>'
+      : l.status === 'REJECTED' ? `<p class="rounded bg-brick/10 p-3 text-sm text-brick"><strong>Rejected:</strong> ${esc(l.rejectionReason || 'No reason was given.')} Please upload a corrected license below.</p>`
+      : expired ? '<p class="rounded bg-brick/10 p-3 text-sm font-semibold text-brick">This license has expired. Please upload a current one below.</p>'
+      : `<p class="rounded bg-teal/10 p-3 text-sm font-semibold text-teal">Verified. You can book cars while this license is valid.</p>`;
+    lInfo.innerHTML = note + `<dl class="mt-4 grid gap-4 text-sm sm:grid-cols-4">
+      <div><dt class="text-asphalt/70">License number</dt><dd class="font-semibold">${esc(l.licenseNumber)}</dd></div>
+      <div><dt class="text-asphalt/70">Type</dt><dd class="font-semibold">${esc(l.licenseType)}</dd></div>
+      <div><dt class="text-asphalt/70">Issued</dt><dd class="font-semibold">${esc(l.issueDate)}</dd></div>
+      <div><dt class="text-asphalt/70">Expires</dt><dd class="font-semibold">${esc(l.expirationDate)}</dd></div></dl>
+      <div class="mt-4 grid max-w-md grid-cols-2 gap-4">${photoTile(l.id, 'front', 'Front')}${photoTile(l.id, 'back', 'Back')}</div>`;
+    loadPhotos(l.id);
+  }
+  // The server only accepts a new submission when there is none, the last was rejected, or the verified one has expired.
+  const canUpload = !l || l.status === 'REJECTED' || (l.status === 'VERIFIED' && expired);
+  lForm.classList.toggle('hidden', !canUpload); lForm.classList.toggle('grid', canUpload);
+  lFormTitle.textContent = l ? 'Upload a new license' : 'Upload your license';
+}
+
+lForm.onsubmit = async e => {
+  e.preventDefault();
+  if (!lNumber.value.trim()) return toast('Enter your license number.', true);
+  if (!lIssue.value || !lExpiry.value) return toast('Enter the issue and expiration dates.', true);
+  if (lIssue.value > localToday()) return toast("The issue date can't be in the future.", true);
+  if (lExpiry.value <= lIssue.value) return toast('The expiration date must be after the issue date.', true);
+  if (lExpiry.value < localToday()) return toast('That license has expired.', true);
+  if (!lFront.files[0] || !lBack.files[0]) return toast('Add a photo of both the front and the back.', true);
+  const fd = new FormData();
+  fd.append('licenseNumber', lNumber.value.trim()); fd.append('licenseType', lType.value);
+  fd.append('issueDate', lIssue.value); fd.append('expirationDate', lExpiry.value);
+  fd.append('front', lFront.files[0]); fd.append('back', lBack.files[0]);
+  lSubmit.disabled = true; lSubmit.textContent = 'Uploading…';
+  try {
+    await API.upload('/license', fd);
+    toast('License submitted for review');
+    lForm.reset(); [[lFrontPrev, lFrontName], [lBackPrev, lBackName]].forEach(([i, n]) => { i.classList.add('hidden'); i.removeAttribute('src'); n.textContent = 'Choose a JPG or PNG (max 5 MB)'; });
+    await loadLicense();
+  } catch (err) { toast(err.message, true); }
+  finally { lSubmit.disabled = false; lSubmit.textContent = 'Submit for review'; }
+};
+loadLicense().catch(err => toast(err.message, true));
+</script></body></html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html><html lang="en"><head><title>Before &amp; after inspection – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <a id="back" href="dashboard.html" class="text-sm font-semibold text-teal underline">&larr; Back</a>
+    <a id="recLink" class="hidden text-sm font-semibold text-teal underline">Full rental record</a>
+  </div>
+  <h1 class="mt-4 font-display text-3xl font-extrabold">Before &amp; after inspection</h1>
+  <p id="sub" class="mt-1 text-asphalt/70"></p>
+  <p id="err" class="mt-6 hidden font-semibold text-brick"></p>
+
+  <div id="summary" class="mt-6 grid gap-4 sm:grid-cols-4"></div>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-2">
+    <section id="colPickup" aria-label="Before rental (pickup)"></section>
+    <section id="colReturn" aria-label="After rental (return)"></section>
+  </div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require();
+const isStaff = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN', 'FINANCE'].includes(me.role);
+const canAct = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const rid = new URLSearchParams(location.search).get('id');
+const FUEL = ['Empty', '1/4', '1/2', '3/4', 'Full'];
+const SEVERITY = ['Minor', 'Moderate', 'Major'];
+const METHODS = ['GCash', 'Maya', 'Card', 'Bank Transfer', 'Cash'];
+let rental = null, insp = [];
+
+back.href = isStaff ? 'bookings.html' : 'dashboard.html';
+if (isStaff) { recLink.href = 'transaction.html?id=' + Number(rid); recLink.classList.remove('hidden'); }
+
+const field = 'mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30';
+const btn = 'rounded bg-asphalt px-4 py-2 text-sm font-semibold text-white hover:bg-teal';
+const km = v => v == null ? '—' : Number(v).toLocaleString() + ' km';
+const row = (k, v) => `<div class="flex justify-between gap-4 py-1.5"><dt class="text-asphalt/70">${k}</dt><dd class="text-right font-semibold">${v}</dd></div>`;
+
+function showError(m) { err.textContent = m; err.classList.remove('hidden'); }
+
+async function load() {
+  if (!/^\d+$/.test(rid || '')) return showError('No rental selected.');
+  try {
+    [rental, insp] = await Promise.all([
+      API.get((isStaff ? '/admin' : '') + '/rentals/' + rid + '/record'),
+      API.get('/rentals/' + rid + '/inspections')]);
+    draw();
+  } catch (e) { showError(e.message); }
+}
+
+function draw() {
+  sub.textContent = `Rental #${rental.id} · ${rental.vehicle.name}${isStaff && rental.vehicle.plateNumber ? ' (' + rental.vehicle.plateNumber + ')' : ''}`;
+  const a = insp.find(i => i.type === 'PICKUP'), b = insp.find(i => i.type === 'RETURN');
+  const stat = (l, v) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-2xl font-extrabold">${v}</p></div>`;
+  const driven = a && b && a.mileage != null && b.mileage != null ? Number(b.mileage) - Number(a.mileage) : null;
+  const fuelChange = a && b && a.fuelLevel && b.fuelLevel ? (a.fuelLevel === b.fuelLevel ? 'Same' : a.fuelLevel + ' → ' + b.fuelLevel) : '—';
+  const dmg = insp.flatMap(i => i.damages);
+  const owed = dmg.filter(d => ['ASSESSED', 'DISPUTED'].includes(d.feeStatus)).reduce((s, d) => s + Number(d.feeAmount) - Number(d.feePaid || 0), 0);
+  summary.innerHTML = stat('Rental status', badge(rental.status)) + stat('Distance driven', driven == null ? '—' : km(driven))
+    + stat('Fuel change', esc(fuelChange)) + stat('Damage fees due', dmg.length ? money(owed) : '—');
+  colPickup.innerHTML = column('Before rental', 'Pickup', a, rental.status === 'APPROVED');
+  colReturn.innerHTML = column('After rental', 'Return', b, rental.status === 'ACTIVE');
+  document.querySelectorAll('img[data-photo]').forEach(img => loadPhoto(img));
+}
+
+/* ---------- one column: either the inspection, or the form to record it, or "not yet" ---------- */
+function column(title, type, i, canRecord) {
+  const head = `<h2 class="font-display text-xl font-bold">${title}</h2>`;
+  if (!i) {
+    const body = canAct && canRecord ? handoverForm(type)
+      : `<p class="mt-3 text-sm text-asphalt/70">${type === 'Pickup' ? 'The pickup inspection has not been done yet. It is recorded when the car is handed over.' : 'The return inspection has not been done yet. It is recorded when the car is brought back.'}</p>`;
+    return `<div class="rounded-lg bg-white p-6">${head}${body}</div>`;
+  }
+  return `<div class="rounded-lg bg-white p-6">${head}
+    <dl class="mt-3 divide-y divide-asphalt/10 text-sm">
+      ${row('Inspected', esc(dt(i.at)))}${row('Mileage', km(i.mileage))}${row('Fuel level', esc(i.fuelLevel || '—'))}
+      ${row('Condition notes', esc(i.conditionNotes || '—'))}
+      ${row('Customer notes', esc(i.customerNotes || '—'))}
+    </dl>
+    ${photoBlock(i)}${notesBlock(i)}${damageBlock(i)}</div>`;
+}
+
+function handoverForm(type) {
+  const pick = type === 'Pickup';
+  return `<form data-handover="${pick ? 'pickup' : 'return'}" class="mt-3 grid gap-3 text-sm">
+    <p class="text-asphalt/70">${pick ? 'Record the car\'s condition before it leaves. Saving this hands the car over and starts the rental.'
+      : 'Record the car\'s condition on return. Saving this closes the rental and works out any late fee.'}</p>
+    <label class="font-semibold">Mileage (km)<input name="mileage" type="number" min="0" step="0.1" class="${field}"></label>
+    <label class="font-semibold">Fuel level<select name="fuelLevel" class="${field}"><option value="">Select…</option>${FUEL.map(f => `<option>${f}</option>`).join('')}</select></label>
+    <label class="font-semibold">Condition notes<textarea name="conditionNotes" rows="3" maxlength="2000" placeholder="Scratches, dents, cleanliness, warning lights…" class="${field}"></textarea></label>
+    <button class="${btn} justify-self-start">${pick ? 'Save pickup &amp; hand over car' : 'Save return &amp; close rental'}</button></form>`;
+}
+
+function photoBlock(i) {
+  const canUpload = canAct || (!isStaff && ['ACTIVE', 'COMPLETED'].includes(rental.status));
+  return `<h3 class="mt-5 font-semibold">Photos <span class="font-normal text-asphalt/60">(${i.photos.length})</span></h3>
+    ${i.photos.length ? `<div class="mt-2 grid grid-cols-3 gap-2">${i.photos.map(p => `<figure>
+      <img data-photo="${p.id}" alt="${esc(p.description || 'Inspection photo')}" class="aspect-square w-full cursor-zoom-in rounded bg-concrete object-cover">
+      <figcaption class="mt-1 truncate text-xs text-asphalt/70">${esc(p.description || '')}</figcaption></figure>`).join('')}</div>`
+      : '<p class="mt-1 text-sm text-asphalt/60">No photos yet.</p>'}
+    ${canUpload ? `<form data-photo-form="${i.id}" class="mt-3 flex flex-wrap items-end gap-2 text-sm">
+      <label class="font-semibold">Add photo (JPG or PNG)<input name="photo" type="file" accept="image/jpeg,image/png" required class="mt-1 block text-sm"></label>
+      <label class="font-semibold">Caption<input name="description" maxlength="200" class="${field} !mt-1 !py-1.5"></label>
+      <button class="${btn}">Upload</button></form>` : ''}`;
+}
+
+function notesBlock(i) {
+  if (isStaff || !['ACTIVE', 'COMPLETED'].includes(rental.status)) return '';
+  return `<form data-notes="${i.id}" class="mt-5 text-sm"><label class="font-semibold">Your notes
+    <textarea name="notes" rows="2" maxlength="2000" required placeholder="Anything you noticed that isn't in the notes above." class="${field}">${esc(i.customerNotes || '')}</textarea></label>
+    <button class="${btn} mt-2">Save my notes</button></form>`;
+}
+
+/* ---------- damage incidents, fees, disputes ---------- */
+function damageBlock(i) {
+  const list = i.damages.map(d => damageCard(d)).join('');
+  const report = canAct ? `<details class="mt-3"><summary class="cursor-pointer text-sm font-semibold text-teal">Report damage found at this inspection</summary>
+    <form data-damage="${i.id}" class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+      <label class="font-semibold">Type<input name="damageType" maxlength="100" placeholder="Scratch, dent, cracked glass…" class="${field}"></label>
+      <label class="font-semibold">Where on the car<input name="locationOnVehicle" maxlength="100" placeholder="Rear bumper, left door…" class="${field}"></label>
+      <label class="font-semibold">Severity<select name="severity" class="${field}">${SEVERITY.map(s => `<option>${s}</option>`).join('')}</select></label>
+      <label class="font-semibold sm:col-span-2">What happened<textarea name="description" rows="2" required class="${field}"></textarea></label>
+      <button class="${btn} justify-self-start">Record damage</button></form></details>` : '';
+  return `<h3 class="mt-6 font-semibold">Damage <span class="font-normal text-asphalt/60">(${i.damages.length})</span></h3>
+    ${list || '<p class="mt-1 text-sm text-asphalt/60">No damage recorded.</p>'}${report}`;
+}
+
+function damageCard(d) {
+  const open = ['ASSESSED', 'DISPUTED'].includes(d.feeStatus);
+  const left = d.feeAmount == null ? 0 : Number(d.feeAmount) - Number(d.feePaid || 0);
+  let fee = '';
+  if (d.feeId == null) fee = `<p class="mt-2 text-sm text-asphalt/70">${isStaff ? 'No fee set yet.' : 'Staff are still reviewing this damage.'}</p>`;
+  else fee = `<div class="mt-2 text-sm"><span class="font-semibold">Fee ${money(d.feeAmount)}</span> ${badge(d.feeStatus)}
+      ${Number(d.feePaid) > 0 ? `<span class="text-asphalt/70"> · paid ${money(d.feePaid)}</span>` : ''}
+      ${d.disputeReason ? `<p class="mt-2 rounded bg-concrete p-2"><span class="font-semibold">Customer's dispute:</span> ${esc(d.disputeReason)}</p>` : ''}
+      ${d.resolutionNotes ? `<p class="mt-2 rounded bg-concrete p-2"><span class="font-semibold">Decision:</span> ${esc(d.resolutionNotes)}</p>` : ''}</div>`;
+
+  const acts = [];
+  if (canAct && d.status !== 'RESOLVED') {
+    if (d.feeStatus !== 'DISPUTED' && d.feeStatus !== 'PAID')
+      acts.push(`<button data-act="fee" data-id="${d.id}" data-amount="${d.feeAmount ?? ''}" class="font-semibold text-teal underline">${d.feeId == null ? 'Set fee' : 'Change fee'}</button>`);
+    if (d.feeStatus === 'DISPUTED') acts.push(`<a href="damages.html?fee=${d.feeId}" class="font-semibold text-brick underline">Decide dispute</a>`);
+    if (d.feeId == null || ['PAID', 'WAIVED'].includes(d.feeStatus))
+      acts.push(`<button data-act="close" data-id="${d.id}" class="font-semibold text-asphalt underline">Mark resolved</button>`);
+  }
+  if (!isStaff && d.feeStatus === 'ASSESSED' && !d.resolutionNotes)
+    acts.push(`<button data-act="dispute" data-fee="${d.feeId}" class="font-semibold text-brick underline">Dispute this fee</button>`);
+  const pay = !isStaff && d.feeStatus === 'ASSESSED' && left > 0 ? `<form data-pay="${d.feeId}" data-left="${left}" class="mt-3 flex flex-wrap items-end gap-2 text-sm">
+      <label class="font-semibold">Pay with<select name="method" class="${field} !mt-1 !py-1.5">${METHODS.map(m => `<option>${m}</option>`).join('')}</select></label>
+      <label class="font-semibold">Reference no.<input name="ref" maxlength="100" class="${field} !mt-1 !py-1.5"></label>
+      <button class="${btn}">Pay ${money(left)}</button></form>` : '';
+
+  return `<article class="mt-2 rounded border border-asphalt/15 p-3">
+    <div class="flex items-start justify-between gap-2"><p class="font-semibold">${esc(d.type || 'Damage')}${d.location ? ' · ' + esc(d.location) : ''}</p>${badge(d.status)}</div>
+    <p class="mt-1 text-sm">${esc(d.description)}</p>
+    <p class="mt-1 text-xs text-asphalt/60">${d.severity ? 'Severity: ' + esc(d.severity) : ''}</p>
+    ${fee}${acts.length ? `<p class="mt-2 flex flex-wrap gap-3 text-sm">${acts.join('')}</p>` : ''}${pay}</article>`;
+}
+
+/* ---------- photos need the login token, so they are fetched and shown as blobs ---------- */
+async function loadPhoto(img) {
+  try {
+    const res = await fetch(CONFIG.API_URL + '/inspection-photos/' + img.dataset.photo, { headers: { Authorization: 'Bearer ' + localStorage.getItem('token') } });
+    if (!res.ok) throw new Error();
+    img.src = URL.createObjectURL(await res.blob());
+    img.onclick = () => window.open(img.src, '_blank');
+  } catch { img.alt = 'Photo could not be loaded'; }
+}
+async function upload(form) {
+  const fd = new FormData(form);
+  const res = await fetch(CONFIG.API_URL + '/inspections/' + form.dataset.photoForm + '/photos', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }, body: fd });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Upload failed (' + res.status + ')'); }
+}
+
+/* ---------- actions ---------- */
+document.addEventListener('submit', async e => {
+  const f = e.target; e.preventDefault();
+  const v = n => f.elements[n] && f.elements[n].value.trim();
+  try {
+    if (f.dataset.handover) {
+      if (!v('fuelLevel')) return toast('Select the fuel level.', true);
+      if (!confirm(f.dataset.handover === 'pickup' ? 'Hand the car over to the customer?' : 'Close this rental and take the car back?')) return;
+      const r = await API.post('/admin/rentals/' + rid + '/' + f.dataset.handover,
+        { mileage: v('mileage') === '' ? null : Number(v('mileage')), fuelLevel: v('fuelLevel'), conditionNotes: v('conditionNotes') });
+      toast(f.dataset.handover === 'pickup' ? 'Pickup recorded' : 'Return recorded' + (Number(r.lateFee) > 0 ? ' – late fee ' + money(r.lateFee) : ''));
+    } else if (f.dataset.photoForm) { await upload(f); toast('Photo uploaded'); }
+    else if (f.dataset.notes) { await API.post('/inspections/' + f.dataset.notes + '/notes', { notes: v('notes') }); toast('Notes saved'); }
+    else if (f.dataset.damage) {
+      await API.post('/admin/inspections/' + f.dataset.damage + '/damages',
+        { damageType: v('damageType'), description: v('description'), locationOnVehicle: v('locationOnVehicle'), severity: v('severity') });
+      toast('Damage recorded');
+    } else if (f.dataset.pay) {
+      await API.post('/payments', { damageFeeId: Number(f.dataset.pay), amount: Number(f.dataset.left), method: v('method'), referenceNumber: v('ref') || null });
+      toast('Payment submitted. Staff will confirm it.');
+    } else return;
+    load();
+  } catch (err) { toast(err.message, true); }
+});
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  try {
+    if (b.dataset.act === 'fee') {
+      const amt = prompt('Damage fee in ' + CONFIG.CURRENCY + ' (enter 0 to waive):', b.dataset.amount || '');
+      if (amt === null) return;
+      if (amt.trim() === '' || isNaN(amt) || Number(amt) < 0) return toast('Enter a fee of zero or more.', true);
+      await API.put('/admin/damages/' + b.dataset.id + '/fee', { amount: Number(amt) }); toast('Fee saved');
+    } else if (b.dataset.act === 'close') {
+      if (!confirm('Mark this damage as resolved?')) return;
+      await API.post('/admin/damages/' + b.dataset.id + '/resolve'); toast('Damage resolved');
+    } else if (b.dataset.act === 'dispute') {
+      const reason = prompt('Why do you disagree with this fee? Staff will review it and reply here.');
+      if (reason === null) return;
+      if (!reason.trim()) return toast('Please give a reason.', true);
+      await API.post('/damage-fees/' + b.dataset.fee + '/dispute', { reason: reason.trim() }); toast('Dispute sent');
+    }
+    load();
+  } catch (err) { toast(err.message, true); }
+});
+load();
+</script></body></html>

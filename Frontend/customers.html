@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><title>Customers – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">Customers</h1>
+  <form id="searchForm" class="mt-6 flex gap-3">
+    <input id="q" type="search" placeholder="Search by name or email" aria-label="Search customers" class="w-full max-w-sm rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
+    <button class="rounded bg-asphalt px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal">Search</button>
+  </form>
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Name</th><th class="p-4">Email</th><th class="p-4">Phone</th><th class="p-4">Account</th><th class="p-4">License</th><th class="p-4">Joined</th><th class="p-4"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-4 hidden">No customers found.</p>
+
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+Auth.require(['STAFF', 'ADMIN', 'SYSTEM_ADMIN']);
+
+async function loadList() {
+  try {
+    const list = await API.get('/admin/customers' + (q.value.trim() ? '?q=' + encodeURIComponent(q.value.trim()) : ''));
+    empty.classList.toggle('hidden', list.length > 0);
+    rows.innerHTML = list.map(c => `<tr class="border-b border-asphalt/10 last:border-0">
+      <td class="p-4 font-semibold">${esc(c.name)}</td><td class="p-4">${esc(c.email)}</td><td class="p-4">${esc(c.phone)}</td>
+      <td class="p-4">${badge(c.status)}</td><td class="p-4">${badge(c.licenseStatus)}</td><td class="p-4">${esc(dt(c.createdAt).slice(0, 10))}</td>
+      <td class="p-4 text-right"><a href="customer.html?id=${Number(c.id)}" class="font-semibold text-teal underline">View</a></td></tr>`).join('');
+  } catch (e) { toast(e.message, true); }
+}
+searchForm.onsubmit = e => { e.preventDefault(); loadList(); };
+loadList();
+</script></body></html>

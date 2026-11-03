@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="en"><head><title>My payments – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-4xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">My payments</h1>
+  <p class="mt-1 text-asphalt/70">Pay for your rentals, see what staff have confirmed, and open your receipts. Damage fees are paid on the <a href="my-damages.html" class="font-semibold text-teal underline">damage fees</a> page.</p>
+
+  <section id="codeBox" class="mt-6 hidden rounded-lg border-2 border-teal bg-white p-6" aria-live="polite">
+    <p class="text-sm font-semibold text-teal">Payment submitted</p>
+    <p class="mt-1 text-sm text-asphalt/70">Give this payment code to our staff when you pay. They will look it up, confirm your payment and hand you a receipt.</p>
+    <p class="mt-3 flex flex-wrap items-center gap-3"><span id="codeVal" class="font-display text-4xl font-extrabold tracking-widest"></span>
+      <button type="button" id="codeCopy" class="rounded border border-asphalt/25 px-3 py-1.5 text-sm font-semibold hover:border-teal">Copy</button></p>
+    <p id="codeInfo" class="mt-2 text-sm text-asphalt/70"></p>
+  </section>
+
+  <h2 class="mt-8 font-display text-xl font-bold">Rentals to pay</h2>
+  <div id="due" class="mt-3 grid gap-4" aria-live="polite"></div>
+  <p id="noDue" class="mt-3 hidden rounded-lg bg-white p-6">Nothing to pay right now.</p>
+
+  <h2 class="mt-10 font-display text-xl font-bold">Payment history</h2>
+  <div class="mt-3 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
+    <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Payment code</th><th class="p-4">Date</th><th class="p-4">For</th><th class="p-4">Method</th><th class="p-4">Reference</th><th class="p-4">Amount</th><th class="p-4">Status</th><th class="p-4">Receipt</th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+  <p id="empty" class="mt-3 hidden rounded-lg bg-white p-6">You have not made any payments yet.</p>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout(); Auth.require(['CUSTOMER']);
+const METHODS = ['GCash', 'Maya', 'Card', 'Bank Transfer', 'Cash'];
+const field = 'mt-1 rounded border border-asphalt/25 bg-white px-3 py-1.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30';
+const NOTE = { PENDING: 'Waiting for staff to confirm', FAILED: 'Not accepted - contact us', REFUNDED: 'Refunded' };
+
+async function load() {
+  try {
+    const [rentals, pays] = await Promise.all([API.get('/rentals/me'), API.get('/payments/me')]);
+    const payable = rentals.filter(r => !['CANCELLED', 'REJECTED'].includes(r.status));
+    const bal = await Promise.all(payable.map(r => API.get('/rentals/' + Number(r.id) + '/balance').catch(() => null)));
+    const owing = payable.map((r, i) => ({ r, b: bal[i] })).filter(x => x.b && Number(x.b.balance) > 0);
+    noDue.classList.toggle('hidden', owing.length > 0);
+    due.innerHTML = owing.map(({ r, b }) => `<article class="rounded-lg bg-white p-6">
+      <div class="flex flex-wrap items-start justify-between gap-2"><div><h3 class="font-display text-lg font-bold">${esc(r.vehicle)}</h3>
+        <p class="text-sm text-asphalt/70">Rental #${Number(r.id)} · ${esc(r.start)} to ${esc(r.end)}</p></div>${badge(r.status)}</div>
+      <p class="mt-3 text-sm text-asphalt/70">Total ${money(b.total)} · paid ${money(b.paid)}${Number(b.pending) > 0 ? ' · awaiting confirmation ' + money(b.pending) : ''}</p>
+      <p class="mt-1 font-display text-2xl font-extrabold">${money(b.balance)}<span class="ml-2 text-sm font-normal text-asphalt/70">left to pay</span></p>
+      <form data-pay="${Number(r.id)}" data-left="${Number(b.balance)}" class="mt-4 flex flex-wrap items-end gap-3 text-sm">
+        <label class="font-semibold">Pay with<select name="method" class="${field} block">${METHODS.map(m => `<option>${m}</option>`).join('')}</select></label>
+        <label class="font-semibold">Reference no.<input name="ref" maxlength="100" class="${field} block"></label>
+        <label class="font-semibold">Amount<input name="amount" type="number" min="1" max="${Number(b.balance)}" step="0.01" value="${Number(b.balance)}" required class="${field} block w-32"></label>
+        <button class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Pay</button></form>
+      <p class="mt-2 text-xs text-asphalt/60">Each payment gets its own payment code to show the staff. Cash needs no reference number. For GCash, Maya, card or bank transfer, enter the reference from your receipt.</p></article>`).join('');
+
+    empty.classList.toggle('hidden', pays.length > 0);
+    rows.innerHTML = pays.map(p => `<tr class="border-b border-asphalt/10 align-top last:border-0"><td class="p-4 font-mono font-semibold tracking-wide">${esc(p.paymentCode || '#' + Number(p.id))}</td><td class="p-4">${esc(dt(p.date))}</td>
+      <td class="p-4">${p.rentalId ? 'Rental #' + Number(p.rentalId) : 'Damage fee #' + Number(p.damageFeeId)}</td><td class="p-4">${esc(p.method || '—')}</td>
+      <td class="p-4">${esc(p.referenceNumber || '—')}</td><td class="p-4">${money(p.amount)}</td><td class="p-4">${badge(p.status)}</td>
+      <td class="p-4">${p.receiptNumber ? `<a href="receipt.html?id=${Number(p.id)}" class="font-semibold text-teal underline">${esc(p.receiptNumber)}</a>` : `<span class="text-asphalt/60">${esc(NOTE[p.status] || '—')}</span>`}</td></tr>`).join('');
+  } catch (e) { toast(e.message, true); }
+}
+function showCode(p) {
+  codeVal.textContent = p.paymentCode; codeInfo.textContent = 'Amount ' + money(p.amount) + ' · ' + p.method + (p.referenceNumber ? ' · ref ' + p.referenceNumber : '');
+  codeBox.classList.remove('hidden'); codeBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+codeCopy.onclick = async () => { try { await navigator.clipboard.writeText(codeVal.textContent); toast('Code copied'); } catch { toast('Select the code and copy it.', true); } };
+due.onsubmit = async e => {
+  e.preventDefault(); const f = e.target, amount = Number(f.elements.amount.value);
+  if (!(amount > 0) || amount > Number(f.dataset.left)) return toast('Enter an amount between 0 and ' + money(f.dataset.left) + '.', true);
+  try {
+    const p = await API.post('/payments', { rentalId: Number(f.dataset.pay), amount, method: f.elements.method.value, referenceNumber: f.elements.ref.value.trim() || null });
+    showCode(p); toast('Payment submitted. Show your payment code to the staff.'); load();
+  } catch (err) { toast(err.message, true); }
+};
+load();
+</script></body></html>

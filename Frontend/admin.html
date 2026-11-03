@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><title>Fleet – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <div class="flex items-center justify-between gap-3">
+    <h1 class="font-display text-3xl font-extrabold">Fleet</h1>
+    <a id="addBtn" href="vehicle.html" class="hidden rounded bg-asphalt px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal">Add vehicle</a>
+  </div>
+  <div id="stats" class="mt-6 grid gap-4 sm:grid-cols-5"></div>
+  <form id="filters" class="mt-6 flex flex-wrap gap-3">
+    <input id="q" type="search" placeholder="Search plate, make or model" aria-label="Search vehicles" class="w-full max-w-xs rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
+    <select id="fs" aria-label="Filter by status" class="rounded border border-asphalt/25 bg-white px-3 py-2.5"><option value="">All statuses</option><option value="AVAILABLE">Available</option><option value="RENTED">Rented</option><option value="MAINTENANCE">Maintenance</option><option value="RETIRED">Retired</option></select>
+  </form>
+  <div class="mt-4 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Plate</th><th class="p-4">Vehicle</th><th class="p-4">Type</th><th class="p-4">Year</th><th class="p-4">Color</th><th class="p-4">Seats</th><th class="p-4">Fuel</th><th class="p-4">Mileage</th><th class="p-4">Daily rate</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-4 hidden">No vehicles match.</p>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+if (['ADMIN', 'SYSTEM_ADMIN'].includes(me.role)) addBtn.classList.remove('hidden');
+let all = [];
+const n = v => v == null ? '—' : v;
+function draw() {
+  const t = q.value.trim().toLowerCase();
+  const list = all.filter(v => (!fs.value || v.status === fs.value)
+    && (!t || (v.plateNumber + ' ' + v.make + ' ' + v.model).toLowerCase().includes(t)));
+  empty.classList.toggle('hidden', list.length > 0);
+  rows.innerHTML = list.map(v => `<tr class="border-b border-asphalt/10 last:border-0">
+    <td class="p-4 font-semibold">${esc(v.plateNumber)}</td><td class="p-4">${esc(v.make)} ${esc(v.model)}</td><td class="p-4">${esc(v.category)}</td>
+    <td class="p-4">${esc(n(v.year))}</td><td class="p-4">${esc(n(v.color))}</td><td class="p-4">${esc(n(v.seatingCapacity))}</td><td class="p-4">${esc(n(v.fuelType))}</td>
+    <td class="p-4">${v.mileage == null ? '—' : Number(v.mileage).toLocaleString() + ' km'}</td><td class="p-4">${v.dailyRate == null ? '—' : money(v.dailyRate)}</td>
+    <td class="p-4">${badge(v.status)}</td><td class="p-4 text-right"><a href="vehicle.html?id=${Number(v.id)}" class="font-semibold text-teal underline">View</a></td></tr>`).join('');
+}
+filters.onsubmit = e => e.preventDefault(); q.oninput = fs.onchange = draw;
+API.get('/admin/vehicles').then(vs => {
+  all = vs;
+  const c = s => vs.filter(v => v.status === s).length;
+  stats.innerHTML = [['Total', vs.length], ['Available', c('AVAILABLE')], ['Rented', c('RENTED')], ['In maintenance', c('MAINTENANCE')], ['Retired', c('RETIRED')]]
+    .map(([l, k]) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-3xl font-extrabold">${k}</p></div>`).join('');
+  draw();
+}).catch(e => toast(e.message, true));
+</script></body></html>

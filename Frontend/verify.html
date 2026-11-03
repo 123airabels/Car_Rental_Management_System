@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="en"><head><title>Confirm email – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-md px-5 py-14">
+  <h1 class="font-display text-3xl font-extrabold">Confirm your email</h1>
+  <div class="mt-6 rounded-lg bg-white p-6">
+    <p id="msg" role="status" aria-live="polite">Confirming your email…</p>
+    <a id="next" href="login.html" class="mt-5 hidden w-full rounded bg-asphalt py-3 text-center font-semibold text-white hover:bg-teal">Go to log in</a>
+  </div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+(async () => {
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) { msg.textContent = 'This confirmation link is incomplete. Open the link from your email again.'; return; }
+  try {
+    const r = await API.post('/auth/verify-email', { token });
+    msg.textContent = r.message; next.classList.remove('hidden'); next.classList.add('block');
+  } catch (err) {
+    msg.textContent = err.message; msg.classList.add('text-brick');
+    next.textContent = 'Back to log in (you can request a new link there)'; next.classList.remove('hidden'); next.classList.add('block');
+  }
+})();
+</script></body></html>

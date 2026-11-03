@@ -1,0 +1,93 @@
+<!DOCTYPE html><html lang="en"><head><title>Browse cars – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">Browse cars</h1>
+  <form id="filters" class="mt-5 grid gap-4 rounded-lg bg-white p-4 md:grid-cols-4 md:items-end">
+    <label class="block text-sm font-semibold">Pickup<input type="date" id="start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="block text-sm font-semibold">Return<input type="date" id="end" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="block text-sm font-semibold">Type<select id="category" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"><option value="">Any type</option><option>Sedan</option><option>SUV</option><option>Pickup</option><option>Van</option></select></label>
+    <button class="rounded bg-asphalt px-5 py-3 font-semibold text-white hover:bg-teal">Update results</button>
+  </form>
+  <p id="count" class="mt-6 text-sm text-asphalt/70" aria-live="polite"></p>
+  <div id="grid" class="mt-3 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"></div>
+</main>
+
+<div id="modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-asphalt/60 p-4" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="w-full max-w-md rounded-lg bg-white p-6">
+    <h2 id="mtitle" class="font-display text-xl font-extrabold"></h2>
+    <dl class="mt-4 space-y-2 text-sm">
+      <div class="flex justify-between"><dt>Pickup</dt><dd id="mStart" class="font-semibold"></dd></div>
+      <div class="flex justify-between"><dt>Return</dt><dd id="mEnd" class="font-semibold"></dd></div>
+      <div class="flex justify-between"><dt id="mDays"></dt><dd id="mRate"></dd></div>
+      <div class="flex justify-between border-t border-asphalt/15 pt-2 text-base"><dt class="font-bold">Total</dt><dd id="mTotal" class="font-display text-xl font-extrabold"></dd></div>
+    </dl>
+    <details class="mt-4 text-sm"><summary class="cursor-pointer font-semibold text-teal">Rental terms and conditions</summary><p id="termsText" class="mt-2 whitespace-pre-line"></p></details>
+    <label class="mt-2 flex items-start gap-2 text-sm"><input type="checkbox" id="termsOk" class="mt-1"> <span>I have read and accept the rental terms and conditions.</span></label>
+    <div class="mt-6 flex justify-end gap-3">
+      <button id="mCancel" class="rounded border border-asphalt/25 px-4 py-2 font-semibold">Cancel</button>
+      <button id="mConfirm" disabled class="rounded bg-teal px-4 py-2 font-semibold text-white hover:brightness-110 disabled:opacity-40">Confirm reservation</button>
+    </div>
+  </div>
+</div>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const q = new URLSearchParams(location.search);
+const today = new Date().toISOString().slice(0, 10);
+start.min = end.min = today;
+start.value = q.get('start') || ''; end.value = q.get('end') || ''; category.value = q.get('category') || '';
+let cars = [], picked = null;
+
+async function load() {
+  grid.innerHTML = '<p>Loading cars…</p>';
+  try {
+    const p = new URLSearchParams({ category: category.value, start: start.value, end: end.value });
+    cars = await API.get('/vehicles?' + p);
+    count.textContent = cars.length + (cars.length === 1 ? ' car found' : ' cars found');
+    grid.innerHTML = cars.length ? cars.map(v => vehicleCard(v, true)).join('')
+      : '<p>No cars match. Try different dates or another vehicle type.</p>';
+  } catch (e) { grid.innerHTML = ''; toast(e.message, true); }
+}
+filters.onsubmit = e => { e.preventDefault(); load(); };
+
+function reserve(id) {
+  if (!Auth.user()) return location.href = 'login.html?next=' + encodeURIComponent('vehicles.html' + location.search);
+  if (!start.value || !end.value || end.value <= start.value) return toast('Choose a pickup date and a later return date first.', true);
+  picked = cars.find(v => v.id == id);
+  const d = daysBetween(start.value, end.value);
+  mtitle.textContent = picked.make + ' ' + picked.model;
+  mStart.textContent = start.value; mEnd.textContent = end.value;
+  mDays.textContent = d + (d === 1 ? ' day' : ' days'); mRate.textContent = money(picked.dailyRate) + ' per day';
+  mTotal.textContent = money(d * picked.dailyRate);
+  termsOk.checked = false; mConfirm.disabled = true;
+  modal.classList.replace('hidden', 'flex'); termsOk.focus();
+}
+
+grid.onclick = e => {
+  const b = e.target.closest('.book');
+  if (b) return reserve(b.dataset.id);
+  const a = e.target.closest('[data-view]'); if (a) openCar(a.dataset.view);
+};
+grid.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('[data-view]')) openCar(e.target.dataset.view); };
+function openCar(id) {
+  const p = new URLSearchParams({ id });
+  if (start.value && end.value && end.value > start.value) { p.set('start', start.value); p.set('end', end.value); }
+  location.href = 'car.html?' + p;
+}
+termsOk.onchange = () => { mConfirm.disabled = !termsOk.checked; };
+API.get('/terms').then(t => { termsText.textContent = t.text; }).catch(() => {});
+const closeModal = () => modal.classList.replace('flex', 'hidden');
+mCancel.onclick = closeModal;
+document.onkeydown = e => e.key === 'Escape' && closeModal();
+mConfirm.onclick = async () => {
+  mConfirm.disabled = true;
+  try { await API.post('/rentals', { vehicleId: picked.id, start: start.value, end: end.value, acceptTerms: termsOk.checked }); location.href = 'dashboard.html'; }
+  catch (e) { toast(e.message, true); mConfirm.disabled = !termsOk.checked; }
+};
+load();
+</script></body></html>

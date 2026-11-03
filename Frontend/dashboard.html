@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><title>My rentals – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">My rentals</h1>
+  <div class="mt-6 overflow-x-auto rounded-lg bg-white">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="empty" class="mt-6 hidden">You have no rentals yet. <a href="vehicles.html" class="font-semibold text-teal underline">Browse cars</a> to book your first one.</p>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout(); Auth.require();
+async function load() {
+  try {
+    const list = await API.get('/rentals/me');
+    empty.classList.toggle('hidden', list.length > 0);
+    rows.innerHTML = list.map(r => `<tr class="border-b border-asphalt/10 last:border-0">
+      <td class="p-4 font-semibold">${esc(r.vehicle)}</td><td class="p-4">${esc(r.start)}</td><td class="p-4">${esc(r.end)}</td>
+      <td class="p-4">${money(r.total)}</td><td class="p-4">${badge(r.status)}</td>
+      <td class="p-4 text-right whitespace-nowrap"><a href="booking.html?id=${Number(r.id)}" class="font-semibold text-teal underline">${['PENDING', 'APPROVED'].includes(r.status) ? 'View / change' : 'View'}</a>${['ACTIVE', 'COMPLETED'].includes(r.status) ? ` <a href="inspection.html?id=${Number(r.id)}" class="ml-3 font-semibold text-teal underline">Inspection</a>` : ''}${['RESERVED', 'PENDING', 'APPROVED'].includes(r.status) ? ` <button data-id="${r.id}" class="cancel ml-3 font-semibold text-brick underline">Cancel</button>` : ''}</td></tr>`).join('');
+  } catch (e) { toast(e.message, true); }
+}
+rows.onclick = async e => {
+  const b = e.target.closest('.cancel'); if (!b || !confirm('Cancel this rental?')) return;
+  try { await API.post('/rentals/' + b.dataset.id + '/cancel'); toast('Rental cancelled'); load(); } catch (err) { toast(err.message, true); }
+};
+load();
+</script></body></html>

@@ -147,6 +147,7 @@ CREATE TABLE public.damage_fee (
     fee_status character varying(30) DEFAULT 'Pending Assessment'::character varying NOT NULL,
     dispute_reason text,
     resolved_at timestamp without time zone,
+    resolution_notes text,
     CONSTRAINT chk_damage_fee_amount CHECK ((amount >= (0)::numeric))
 );
 
@@ -299,6 +300,8 @@ CREATE TABLE public.payment (
     payment_status character varying(30) DEFAULT 'Pending'::character varying NOT NULL,
     reference_number character varying(100),
     receipt_number character varying(100),
+    payment_code character varying(20),
+    received_by integer,
     CONSTRAINT chk_payment_amount CHECK ((amount > (0)::numeric)),
     CONSTRAINT chk_payment_target CHECK ((((rental_id IS NOT NULL) AND (damage_fee_id IS NULL)) OR ((rental_id IS NULL) AND (damage_fee_id IS NOT NULL))))
 );
@@ -836,6 +839,22 @@ ALTER TABLE ONLY public.inspection_photo
 
 ALTER TABLE ONLY public.payment
     ADD CONSTRAINT payment_pkey PRIMARY KEY (payment_id);
+
+
+--
+-- Name: payment payment_payment_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment
+    ADD CONSTRAINT payment_payment_code_key UNIQUE (payment_code);
+
+
+--
+-- Name: payment payment_received_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment
+    ADD CONSTRAINT payment_received_by_fkey FOREIGN KEY (received_by) REFERENCES public.staff(staff_id);
 
 
 --
