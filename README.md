@@ -1,4 +1,6 @@
-# Car Rental Management System
+# ByaheRentals
+
+### Car Rental Management System
 
 # PROJECT OVERVIEW
 The Car Rental Management System is a database-driven application designed to organize the main operations of a self-drive car rental business. It aims to manage customer information, driver's license verification, vehicle records, rental rates, reservations, payments, vehicle inspections, damage records, maintenance, cancellations, and rental history using PostgreSQL.
