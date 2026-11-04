@@ -26,67 +26,158 @@ Before running the application, make sure you have the following installed and c
 - Car Rental Database — the `car_rental_db` database must exist, and the required tables must already be created.
 - Project Files — make sure you have downloaded or cloned the project repository.
 
-HOW TO RUN THE APPLICATION
-Follow these steps to run the Car Rental Management System on your local computer.
-Step 1: Open the Project Folder
-1. Open the project folder on your computer.
-2. Open the `Application` folder, where the `mvnw.cmd` file is located.
-3. Open a terminal in this folder.
 
-   Your terminal should be inside the `Application` folder before proceeding.
+# HOW TO SET UP AND RUN THE CAR RENTAL MANAGEMENT SYSTEM
 
-Step 2: Make Sure PostgreSQL Is Running
-1. Open PostgreSQL using your installed PostgreSQL service or pgAdmin.
-2. Make sure the PostgreSQL server is running on port `5432`.
-3. Check that the `car_rental_db` database exists and contains the required tables.
-If the database or tables are missing, follow the database setup instructions in the project's database documentation before continuing.
+Follow these steps to set up and run the Car Rental Management System on a local Windows computer. The project consists of three main parts: the PostgreSQL database, the Spring Boot backend application, and the frontend website.
 
-Step 3: Set the Database Password [Continuation of Step 1]
-The application reads the PostgreSQL password from an environment variable named `DB_PASSWORD`. This helps prevent the actual password from being written directly into the project's configuration file.
+## Step 1: Open the Project Folder
 
-Choose the instructions that match your terminal.
-Option A: Windows Command Prompt (CMD)
+1. Open Windows PowerShell.
+2. Navigate to the project folder:
 
-1. In the terminal, enter the following command:
-   set "DB_PASSWORD=your_actual_postgres_password"
-2. Replace `your_actual_postgres_password` with the password you use to connect to PostgreSQL.
-3. Press Enter.
+   ```powershell
+   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System
+   ```
 
-Option B: Windows PowerShell
-1. In the terminal, enter the following command:
+3. Check the project folders:
+
+   ```powershell
+   dir
+   ```
+
+   The project should contain the following folders:
+
+   - `Database`
+   - `Application`
+   - `Frontend`
+
+## Step 2: Set Up the PostgreSQL Database
+
+1. Make sure the PostgreSQL service is running.
+2. Confirm that PostgreSQL is using port `5432`.
+3. Navigate to the `Database` folder:
+
+   ```powershell
+   cd Database
+   ```
+
+4. Check the available database files:
+
+   ```powershell
+   dir
+   ```
+
+5. If the `car_rental_db` database has not been created yet, create it:
+
+   ```powershell
+   psql -U postgres -h localhost -p 5432 -c "CREATE DATABASE car_rental_db;"
+   ```
+
+6. Run the database schema to create the required tables:
+
+   ```powershell
+   psql -U postgres -h localhost -p 5432 -d car_rental_db -f schema.sql
+   ```
+
+7. Insert the sample data:
+
+   ```powershell
+   psql -U postgres -h localhost -p 5432 -d car_rental_db -f seed.sql
+   ```
+
+8. Verify that the database and its tables were created successfully.
+
+**Reminder:** If the database and tables already exist, do not run the schema and seed files again unless you are intentionally setting up or resetting the database. Do not run `reset_seed.sql` unless you intend to reset the sample data.
+
+## Step 3: Configure and Start the Backend Application
+
+1. Open a new PowerShell window.
+2. Navigate to the `Application` folder:
+
+   ```powershell
+   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System\Application
+   ```
+
+3. Set the PostgreSQL password using the environment variable:
+
+   ```powershell
    $env:DB_PASSWORD = "your_actual_postgres_password"
-2. Replace `your_actual_postgres_password` with your actual PostgreSQL password.
-3. Press Enter.
+   ```
 
-Step 4: Start the Spring Boot Application
-After setting the password, run the command that matches your terminal.
+   Replace `your_actual_postgres_password` with the password used for your local PostgreSQL account.
 
-If you are using Command Prompt (CMD):
-mvnw.cmd spring-boot:run
+4. Start the Spring Boot application:
 
-If you are using PowerShell:
-.\mvnw.cmd spring-boot:run
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
 
-- Press Enter and wait for Spring Boot to finish starting. The first run may take longer because Maven needs to download the required dependencies.
-- Keep the terminal open while using the application. Closing it or stopping the running process will stop the application.
+5. Wait for the application to finish starting. Check the terminal for messages indicating that Spring Boot and the embedded Tomcat server have started successfully.
 
-Step 5: Check the Application
-- Check the terminal for startup messages indicating that Spring Boot and the embedded Tomcat server have started successfully.
-- The application is configured to use port `8080` by default. If a web page or API endpoint has already been implemented, open the corresponding URL in your browser or API testing tool.
-- For example:
-http://localhost:8080
+6. Keep this terminal open while using the application. Closing the terminal or stopping the process will stop the backend.
 
-Step 6: Stop the Application
-When you finish testing, return to the terminal where the application is running and press:
-Ctrl + C
+The backend application uses port `8080` by default.
 
-This stops the Spring Boot application. Your PostgreSQL database service remains separate and will not automatically stop when you stop Spring Boot.
+**Important:** If the terminal reports that port `8080` is already in use, the backend may already be running. Do not start another instance. Use the existing running application or stop it before restarting.
 
-ADDITIONAL REMINDER:
-- The current database configuration uses `localhost:5432` and the database name `car_rental_db`.
-- The application uses `spring.jpa.hibernate.ddl-auto=none`, so Hibernate will not automatically create the database tables.
+## Step 4: Start the Frontend Website
+
+1. Open another new PowerShell window.
+2. Navigate to the `Frontend` folder:
+
+   ```powershell
+   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System\Frontend
+   ```
+
+3. Start the local frontend server:
+
+   ```powershell
+   python -m http.server 5500
+   ```
+
+4. Keep this terminal open while using the website.
+
+The frontend website uses port `5500` by default.
+
+## Step 5: Open and Test the Application
+
+Open a web browser and visit:
+
+- Frontend website: http://localhost:5500
+- Backend application: http://localhost:8080
+
+Use the frontend website to test the system. Confirm that the frontend can communicate with the backend and that the backend can connect to the PostgreSQL database.
+
+Test the main workflow, including:
+
+1. Customer registration and login.
+2. Viewing available vehicles.
+3. Submitting a reservation.
+4. Reviewing and approving or rejecting a reservation.
+5. Submitting and verifying payment.
+6. Recording vehicle pickup and return.
+
+## Step 6: Stop the Application
+
+When you finish testing:
+
+1. Return to the terminal running the frontend server.
+2. Press `Ctrl + C` to stop the frontend server.
+3. Return to the terminal running Spring Boot.
+4. Press `Ctrl + C` to stop the backend application.
+
+Stopping the backend or frontend does not automatically stop the PostgreSQL service.
+
+## Additional Reminders
+
+- PostgreSQL is configured to use `localhost:5432`.
+- The database name is `car_rental_db`.
+- The backend reads the PostgreSQL password from the `DB_PASSWORD` environment variable.
+- The application uses `spring.jpa.hibernate.ddl-auto=none`. Hibernate will not automatically create missing database tables.
 - Each developer must configure their own local PostgreSQL password.
 - If the application fails to start, refer to `docs/troubleshooting.md` for common errors and possible solutions.
+
 
 WEB FRONT END AND API (ADDED)
 The `Frontend` folder holds the Byahe Rentals website (HTML, Tailwind, JavaScript). The Spring Boot app in `Application` now exposes the REST API it uses, reading and writing the existing tables through JDBC (the database schema is unchanged).
