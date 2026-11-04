@@ -65,20 +65,38 @@ Follow these steps to set up and run the Car Rental Management System on a local
    ```powershell
    psql -U postgres -h localhost -p 5432 -c "CREATE DATABASE car_rental_db;"
    ```
-
-6. Run the database schema to create the required tables:
+   
+   or
+   
+    ```powershell
+   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -c "CREATE DATABASE car_rental_db;"
+   ```
+    
+7. Run the database schema to create the required tables:
 
    ```powershell
    psql -U postgres -h localhost -p 5432 -d car_rental_db -f schema.sql
    ```
 
-7. Insert the sample data:
+   or
+
+    ```powershell
+   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -d car_rental_db -f schema.sql
+   ```
+
+9. Insert the sample data:
 
    ```powershell
    psql -U postgres -h localhost -p 5432 -d car_rental_db -f seed.sql
    ```
 
-8. Verify that the database and its tables were created successfully.
+   or
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -d car_rental_db -f seed.sql
+   ```
+
+11. Verify that the database and its tables were created successfully.
 
 **Reminder:** If the database and tables already exist, do not run the schema and seed files again unless you are intentionally setting up or resetting the database. Do not run `reset_seed.sql` unless you intend to reset the sample data.
 
