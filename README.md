@@ -1,25 +1,17 @@
-(Also to make it run go to mvnw.cmd run the terminal there and add this to the terminal
-cd (your file path like this C:\Users\Drei\Desktop\Programming\CarRentalSystem\Application)
-$env:DB_PASSWORD = "(Your DB password)"
-.\mvnw.cmd spring-boot:run
-
-then wait for it to finish
-)
-
-PROJECT OVERVIEW
+# PROJECT OVERVIEW
 The Car Rental Management System is a database-driven application designed to organize the main operations of a self-drive car rental business. It aims to manage customer information, driver's license verification, vehicle records, rental rates, reservations, payments, vehicle inspections, damage records, maintenance, cancellations, and rental history using PostgreSQL.
 
 The proposed system allows customers to register, browse available vehicles, submit rental requests, and view their booking and payment information. Rental staff can manage vehicle records, verify driver's licenses, review rental requests, record vehicle inspections, process returns, and manage rental-related transactions.
 
 The application uses Java and Spring Boot for the backend and PostgreSQL for data storage. The project is being developed with a focus on relational database design, data integrity, and secure access to records.
 
-PROJECT OBJECTIVES
+# PROJECT OBJECTIVES
 Organize customer, vehicle, rental, and payment records in a centralized database.
 Maintain relationships and data integrity through primary keys, foreign keys, and other constraints.
 Support the development of core car rental management operations.
 Provide a foundation for database administration activities, including access control, monitoring, backup, and recovery.
 
-PREREQUISITES
+# PREREQUISITES
 Before running the application, make sure you have the following installed and configured:
 - Java JDK 17 — required to run the Spring Boot application.
 - PostgreSQL — the database server must be running.
