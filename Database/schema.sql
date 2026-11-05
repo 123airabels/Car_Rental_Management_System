@@ -302,6 +302,7 @@ CREATE TABLE public.payment (
     receipt_number character varying(100),
     payment_code character varying(20),
     received_by integer,
+    proof_path character varying(255),
     CONSTRAINT chk_payment_amount CHECK ((amount > (0)::numeric)),
     CONSTRAINT chk_payment_target CHECK ((((rental_id IS NOT NULL) AND (damage_fee_id IS NULL)) OR ((rental_id IS NULL) AND (damage_fee_id IS NOT NULL))))
 );
@@ -463,7 +464,8 @@ CREATE TABLE public.staff (
     password_hash text NOT NULL,
     role character varying(50) NOT NULL,
     account_status character varying(30) DEFAULT 'Active'::character varying NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chk_staff_role CHECK (((role)::text = ANY ((ARRAY['Staff'::character varying, 'Finance'::character varying, 'Admin'::character varying, 'System Admin'::character varying])::text[])))
 );
 
 
@@ -1227,3 +1229,12 @@ ALTER TABLE ONLY public.vehicle
 
 \unrestrict EoA2xkFwq80ElzPBPMHJ50cebLQQgJkHGFgVOeKYtIhQCyY5TYYzLYW6VDJSjGE
 
+-- Condition checklist of an inspection (also created automatically at startup)
+CREATE TABLE IF NOT EXISTS inspection_item (
+    item_id serial PRIMARY KEY,
+    inspection_id integer NOT NULL REFERENCES vehicle_inspection(inspection_id) ON DELETE CASCADE,
+    item_name character varying(60) NOT NULL,
+    item_condition character varying(30) NOT NULL,
+    notes text,
+    CONSTRAINT inspection_item_unique UNIQUE (inspection_id, item_name)
+);

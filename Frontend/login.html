@@ -12,6 +12,8 @@
     <label class="block text-sm font-semibold">Email<input required type="email" id="email" autocomplete="email" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
     <label class="block text-sm font-semibold">Password<input required minlength="8" type="password" id="password" autocomplete="current-password" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
     <button id="submit" class="w-full rounded bg-asphalt py-3 font-semibold text-white hover:bg-teal">Log in</button>
+    <p id="resendRow" class="hidden text-center text-sm"><button type="button" id="resend" class="font-semibold text-teal underline">Resend confirmation email</button></p>
+    <p id="forgotRow" class="text-center text-sm"><a href="forgot-password.html" class="font-semibold text-teal underline">Forgot password?</a></p>
     <p class="text-center text-sm"><span id="swapText">New here?</span> <button type="button" id="swap" class="font-semibold text-teal underline">Create an account</button></p>
     <p id="hint" class="text-xs text-asphalt/60" aria-live="polite"></p>
   </form>
@@ -32,8 +34,11 @@ swap.onclick = () => {
   swapText.textContent = register ? 'Already registered?' : 'New here?';
   swap.textContent = register ? 'Log in' : 'Create an account';
   password.autocomplete = register ? 'new-password' : 'current-password';
+  forgotRow.classList.toggle('hidden', register);
+  resendRow.classList.add('hidden');
   hint.textContent = register ? 'Use at least 8 characters, with a letter and a number. We will email you a link to confirm your address.' : '';
 };
+if (new URLSearchParams(location.search).get('mode') === 'signup') swap.click();   // the "Sign up" button in the menu opens this page in sign-up mode
 form.onsubmit = async e => {
   e.preventDefault(); submit.disabled = true;
   try {
@@ -45,7 +50,18 @@ form.onsubmit = async e => {
     }
     Auth.login(data);
     const next = new URLSearchParams(location.search).get('next');
-    location.href = next && /^[\w.\-?=&%]+$/.test(next) ? next : (data.user.role === 'CUSTOMER' ? 'dashboard.html' : 'overview.html');
-  } catch (err) { toast(err.message, true); submit.disabled = false; }
+    location.href = next && /^[\w.\-?=&%]+$/.test(next) ? next : (data.user.role === 'CUSTOMER' ? 'dashboard.html' : data.user.role === 'SYSTEM_ADMIN' ? 'staff.html' : 'overview.html');
+  } catch (err) {
+    toast(err.message, true); submit.disabled = false;
+    // An unconfirmed account (or a sign-up with an email that is still waiting for confirmation) can ask for the link again.
+    resendRow.classList.toggle('hidden', !/confirm/i.test(err.message));
+  }
+};
+resend.onclick = async () => {
+  if (!email.value.trim()) return toast('Enter your email first.', true);
+  resend.disabled = true;
+  try { const r = await API.post('/auth/resend-verification', { email: email.value }); hint.textContent = r.message; toast(r.message); }
+  catch (err) { toast(err.message, true); }
+  setTimeout(() => { resend.disabled = false; }, 30000);   // one request every 30 seconds from this page
 };
 </script></body></html>

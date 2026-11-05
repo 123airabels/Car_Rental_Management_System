@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 /** Looks up who is calling. The JWT only carries the email and role, so ids come from the database. */
 @Component
 public class CurrentUser {
-    private static final Set<String> STAFF_ROLES = Set.of("STAFF", "FINANCE", "ADMIN", "SYSTEM_ADMIN");
+    private static final Set<String> STAFF_ROLES = Set.of("STAFF", "FINANCE", "ADMIN");   // System Admin is technical only, so it is not operational staff
     private final JdbcTemplate db;
 
     public CurrentUser(JdbcTemplate db) { this.db = db; }

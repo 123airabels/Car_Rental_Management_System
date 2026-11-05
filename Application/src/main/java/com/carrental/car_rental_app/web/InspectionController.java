@@ -28,8 +28,9 @@ public class InspectionController {
     record PhotoDto(int id, String description, LocalDateTime uploadedAt) {}
     record DamageSummary(int id, String type, String description, String location, String severity, String status,
                          Integer feeId, BigDecimal feeAmount, String feeStatus, String disputeReason, String resolutionNotes, BigDecimal feePaid) {}
+    record CheckDto(String item, String condition, String notes) {}
     record InspectionDto(int id, int rentalId, String type, LocalDateTime at, BigDecimal mileage, String fuelLevel,
-                         String conditionNotes, String customerNotes, List<PhotoDto> photos, List<DamageSummary> damages) {}
+                         String conditionNotes, String customerNotes, List<PhotoDto> photos, List<DamageSummary> damages, List<CheckDto> checklist) {}
     record NotesRequest(String notes) {}
 
     @GetMapping("/api/rentals/{rentalId}/inspections")
@@ -41,7 +42,7 @@ public class InspectionController {
                     int id = rs.getInt("inspection_id");
                     return new InspectionDto(id, rs.getInt("rental_id"), Rows.up(rs.getString("inspection_type")), Rows.ldt(rs, "inspection_datetime"),
                             rs.getBigDecimal("mileage"), rs.getString("fuel_level"), rs.getString("condition_notes"), rs.getString("customer_notes"),
-                            photos(id), damages(id));
+                            photos(id), damages(id), checklist(id));
                 }, rentalId);
     }
 
@@ -88,6 +89,11 @@ public class InspectionController {
         String path = String.valueOf(rows.get(0).get("photo_path"));
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(FileStorage.contentType(path)))
                 .header("Cache-Control", "private, no-store").body(files.read(path));
+    }
+
+    private List<CheckDto> checklist(int inspectionId) {
+        return db.query("SELECT item_name, item_condition, notes FROM inspection_item WHERE inspection_id = ? ORDER BY item_id",
+                (rs, i) -> new CheckDto(rs.getString("item_name"), rs.getString("item_condition"), rs.getString("notes")), inspectionId);
     }
 
     private List<PhotoDto> photos(int inspectionId) {

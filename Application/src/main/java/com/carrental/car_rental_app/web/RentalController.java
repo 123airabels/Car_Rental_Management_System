@@ -4,7 +4,9 @@ import com.carrental.car_rental_app.support.BookingService;
 import com.carrental.car_rental_app.support.CurrentUser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,19 +19,25 @@ public class RentalController {
     private final JdbcTemplate db;
     private final CurrentUser users;
     private final BookingService bookings;
+    private final long paymentDeadlineHours;
 
-    public RentalController(JdbcTemplate db, CurrentUser users, BookingService bookings) {
-        this.db = db; this.users = users; this.bookings = bookings;
+    public RentalController(JdbcTemplate db, CurrentUser users, BookingService bookings,
+                            @Value("${app.rental.payment-deadline-hours:24}") long paymentDeadlineHours) {
+        this.db = db; this.users = users; this.bookings = bookings; this.paymentDeadlineHours = paymentDeadlineHours;
     }
 
     record CreateRequest(Integer vehicleId, String start, String end, Boolean acceptTerms) {}
     record ChangeRequest(String start, String end) {}
     record Check(boolean available, String reason) {}
-    record RentalDto(int id, int vehicleId, String vehicle, LocalDate start, LocalDate end, BigDecimal total, String status, String reason) {}
+    record RentalDto(int id, int vehicleId, String vehicle, LocalDate start, LocalDate end, BigDecimal total, String status, String reason,
+                     BigDecimal amountDue, LocalDateTime paymentDueAt) {}
 
     private static final String SELECT = """
         SELECT r.rental_id, r.vehicle_id, v.make || ' ' || v.model AS vehicle, r.pickup_datetime::date AS start_date,
                r.return_datetime::date AS end_date, COALESCE(r.final_cost, r.estimated_cost) AS total, r.rental_status,
+               r.approved_at, r.pickup_datetime,
+               COALESCE(r.final_cost, r.estimated_cost, 0) - (SELECT COALESCE(SUM(p.amount), 0) FROM payment p
+                   WHERE p.rental_id = r.rental_id AND p.payment_status IN ('Paid', 'Pending')) AS amount_due,
                (SELECT x.cancellation_reason FROM cancellation x WHERE x.rental_id = r.rental_id ORDER BY x.cancellation_id DESC LIMIT 1) AS reason
         FROM rental r JOIN vehicle v ON v.vehicle_id = r.vehicle_id JOIN customer c ON c.customer_id = r.customer_id
         """;
@@ -130,8 +138,24 @@ public class RentalController {
 
     private static LocalDate date(String s) { return Rows.date(s, "Choose a pickup date and a return date."); }
 
-    private static RentalDto dto(java.sql.ResultSet rs) throws java.sql.SQLException {
+    /**
+     * Payment is asked for only after staff approve the booking. The deadline is the approval time plus the configured hours,
+     * but never later than the end of the pickup day. Pending, rejected and cancelled bookings owe nothing yet.
+     */
+    private RentalDto dto(java.sql.ResultSet rs) throws java.sql.SQLException {
+        String status = rs.getString("rental_status").toUpperCase();
+        BigDecimal due = null;
+        LocalDateTime deadline = null;
+        if (List.of("APPROVED", "ACTIVE", "COMPLETED").contains(status)) {
+            due = rs.getBigDecimal("amount_due").max(BigDecimal.ZERO);
+            LocalDateTime approved = Rows.ldt(rs, "approved_at"), pickup = Rows.ldt(rs, "pickup_datetime");
+            if (status.equals("APPROVED") && approved != null && due.signum() > 0) {
+                deadline = approved.plusHours(paymentDeadlineHours);
+                LocalDateTime lastDay = pickup.toLocalDate().atTime(23, 59);
+                if (deadline.isAfter(lastDay)) deadline = lastDay;
+            }
+        }
         return new RentalDto(rs.getInt("rental_id"), rs.getInt("vehicle_id"), rs.getString("vehicle"), rs.getDate("start_date").toLocalDate(),
-                rs.getDate("end_date").toLocalDate(), rs.getBigDecimal("total"), rs.getString("rental_status").toUpperCase(), rs.getString("reason"));
+                rs.getDate("end_date").toLocalDate(), rs.getBigDecimal("total"), status, rs.getString("reason"), due, deadline);
     }
 }

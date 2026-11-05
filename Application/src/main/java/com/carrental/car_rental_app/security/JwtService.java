@@ -17,14 +17,17 @@ import org.springframework.stereotype.Component;
 public class JwtService {
     private static final Logger log = LoggerFactory.getLogger(JwtService.class);
     private static final String PURPOSE_VERIFY = "verify";
+    private static final String PURPOSE_RESET = "reset";
 
     private final SecretKey key;
     private final long expirationMs;
     private final long verifyMs;
+    private final long resetMs;
 
     public JwtService(@Value("${app.jwt.secret:}") String secret,
                       @Value("${app.jwt.expiration-ms}") long expirationMs,
-                      @Value("${app.security.verify-token-hours:24}") long verifyHours) {
+                      @Value("${app.security.verify-token-hours:24}") long verifyHours,
+                      @Value("${app.security.reset-token-minutes:60}") long resetMinutes) {
         byte[] bytes;
         if (secret == null || secret.isBlank() || secret.startsWith("change-this-secret")) {
             bytes = new byte[48];
@@ -38,6 +41,7 @@ public class JwtService {
         this.key = Keys.hmacShaKeyFor(bytes);
         this.expirationMs = expirationMs;
         this.verifyMs = verifyHours * 3_600_000L;
+        this.resetMs = resetMinutes * 60_000L;
     }
 
     public String create(String email, String role) {
@@ -73,5 +77,29 @@ public class JwtService {
         if (!PURPOSE_VERIFY.equals(c.get("purpose", String.class)) || c.getSubject() == null)
             throw new JwtException("Not a confirmation token.");
         return c.getSubject();
+    }
+
+    /**
+     * A signed, short-lived token for the password-reset link. It carries no role, so it can never call the API.
+     * {@code fingerprint} is derived from the current password hash, so the link stops working as soon as the password changes (single use).
+     */
+    public String createResetToken(String email, String fingerprint) {
+        long now = System.currentTimeMillis();
+        return Jwts.builder()
+                .subject(email)
+                .claim("purpose", PURPOSE_RESET)
+                .claim("fp", fingerprint)
+                .issuedAt(new Date(now))
+                .expiration(new Date(now + resetMs))
+                .signWith(key)
+                .compact();
+    }
+
+    /** @return the claims of a valid reset token; throws JwtException or IllegalArgumentException otherwise. */
+    public Claims parseResetToken(String token) {
+        Claims c = parse(token);
+        if (!PURPOSE_RESET.equals(c.get("purpose", String.class)) || c.getSubject() == null || c.get("fp", String.class) == null)
+            throw new JwtException("Not a password-reset token.");
+        return c;
     }
 }

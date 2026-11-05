@@ -6,6 +6,7 @@
 <body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
 <main class="mx-auto max-w-6xl px-5 py-10">
   <h1 class="font-display text-3xl font-extrabold">My rentals</h1>
+  <div id="dueBanner" class="mt-4 space-y-3" aria-live="polite"></div>
   <div class="mt-6 overflow-x-auto rounded-lg bg-white">
     <table class="w-full text-left text-sm">
       <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
@@ -22,6 +23,13 @@ async function load() {
   try {
     const list = await API.get('/rentals/me');
     empty.classList.toggle('hidden', list.length > 0);
+    // After staff approve a booking, ask the customer to pay: amount due and deadline.
+    dueBanner.innerHTML = list.filter(r => r.status === 'APPROVED' && Number(r.amountDue) > 0).map(r => {
+      const late = r.paymentDueAt && new Date(r.paymentDueAt) < new Date();
+      return `<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 ${late ? 'border-brick' : 'border-teal'} bg-white p-4">
+        <p class="text-sm"><span class="font-semibold">Booking #${Number(r.id)} (${esc(r.vehicle)}) is approved.</span> Amount due <span class="font-display text-lg font-extrabold">${money(r.amountDue)}</span>${r.paymentDueAt ? ` · pay by <span class="font-semibold ${late ? 'text-brick' : ''}">${esc(dt(r.paymentDueAt))}</span>${late ? ' (past due)' : ''}` : ''}</p>
+        <a href="payments.html" class="rounded bg-asphalt px-4 py-2 text-sm font-semibold text-white hover:bg-teal">Pay now</a></div>`;
+    }).join('');
     rows.innerHTML = list.map(r => `<tr class="border-b border-asphalt/10 last:border-0">
       <td class="p-4 font-semibold">${esc(r.vehicle)}</td><td class="p-4">${esc(r.start)}</td><td class="p-4">${esc(r.end)}</td>
       <td class="p-4">${money(r.total)}</td><td class="p-4">${badge(r.status)}</td>

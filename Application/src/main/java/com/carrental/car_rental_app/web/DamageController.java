@@ -34,7 +34,7 @@ public class DamageController {
     record IncidentDto(int id, int inspectionId, int rentalId, String vehicle, String type, String description, String location,
                        String severity, String status, LocalDateTime reportedAt, Integer feeId, BigDecimal feeAmount, String feeStatus) {}
     record FeeDto(int id, int damageId, int rentalId, String vehicle, String customer, String description, BigDecimal amount,
-                  BigDecimal paid, String status, String disputeReason, String resolutionNotes, LocalDateTime assessedAt) {}
+                  BigDecimal paid, BigDecimal pending, String status, String disputeReason, String resolutionNotes, LocalDateTime assessedAt) {}
 
     private static final String INCIDENT_SELECT = """
         SELECT d.damage_id, d.inspection_id, i.rental_id, v.make || ' ' || v.model AS vehicle, d.damage_type, d.description,
@@ -47,7 +47,8 @@ public class DamageController {
     private static final String FEE_SELECT = """
         SELECT f.damage_fee_id, f.damage_id, r.rental_id, r.customer_id, v.make || ' ' || v.model AS vehicle,
                c.first_name || ' ' || c.last_name AS customer, d.description, f.amount, f.fee_status, f.dispute_reason, f.resolution_notes, f.assessment_date,
-               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.damage_fee_id = f.damage_fee_id AND p.payment_status = 'Paid') AS paid
+               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.damage_fee_id = f.damage_fee_id AND p.payment_status = 'Paid') AS paid,
+               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.damage_fee_id = f.damage_fee_id AND p.payment_status = 'Pending') AS pending
         FROM damage_fee f JOIN damage_incident d ON d.damage_id = f.damage_id
         JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id
         JOIN rental r ON r.rental_id = i.rental_id JOIN vehicle v ON v.vehicle_id = r.vehicle_id
@@ -63,7 +64,7 @@ public class DamageController {
 
     private static FeeDto fee(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new FeeDto(rs.getInt("damage_fee_id"), rs.getInt("damage_id"), rs.getInt("rental_id"), rs.getString("vehicle"),
-                rs.getString("customer"), rs.getString("description"), rs.getBigDecimal("amount"), rs.getBigDecimal("paid"),
+                rs.getString("customer"), rs.getString("description"), rs.getBigDecimal("amount"), rs.getBigDecimal("paid"), rs.getBigDecimal("pending"),
                 Rows.up(rs.getString("fee_status")), rs.getString("dispute_reason"), rs.getString("resolution_notes"), Rows.ldt(rs, "assessment_date"));
     }
 

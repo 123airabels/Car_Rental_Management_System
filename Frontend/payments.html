@@ -18,11 +18,12 @@
 
   <h2 class="mt-8 font-display text-xl font-bold">Rentals to pay</h2>
   <div id="due" class="mt-3 grid gap-4" aria-live="polite"></div>
+  <p id="waitNote" class="mt-3 hidden rounded-lg bg-line/30 p-4 text-sm font-semibold"></p>
   <p id="noDue" class="mt-3 hidden rounded-lg bg-white p-6">Nothing to pay right now.</p>
 
   <h2 class="mt-10 font-display text-xl font-bold">Payment history</h2>
   <div class="mt-3 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
-    <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Payment code</th><th class="p-4">Date</th><th class="p-4">For</th><th class="p-4">Method</th><th class="p-4">Reference</th><th class="p-4">Amount</th><th class="p-4">Status</th><th class="p-4">Receipt</th></tr></thead>
+    <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Payment code</th><th class="p-4">Date</th><th class="p-4">For</th><th class="p-4">Method</th><th class="p-4">Reference</th><th class="p-4">Amount</th><th class="p-4">Status</th><th class="p-4">Proof</th><th class="p-4">Receipt</th></tr></thead>
     <tbody id="rows"></tbody></table></div>
   <p id="empty" class="mt-3 hidden rounded-lg bg-white p-6">You have not made any payments yet.</p>
 </main>
@@ -37,7 +38,11 @@ const NOTE = { PENDING: 'Waiting for staff to confirm', FAILED: 'Not accepted - 
 async function load() {
   try {
     const [rentals, pays] = await Promise.all([API.get('/rentals/me'), API.get('/payments/me')]);
-    const payable = rentals.filter(r => !['CANCELLED', 'REJECTED'].includes(r.status));
+    // Payment opens only after staff approve the booking.
+    const payable = rentals.filter(r => !['PENDING', 'CANCELLED', 'REJECTED'].includes(r.status));
+    const waiting = rentals.filter(r => r.status === 'PENDING').length;
+    waitNote.classList.toggle('hidden', !waiting);
+    waitNote.textContent = waiting + (waiting === 1 ? ' booking is' : ' bookings are') + ' waiting for staff approval. You will pay after it is approved, and we will show the amount due and the payment deadline here.';
     const bal = await Promise.all(payable.map(r => API.get('/rentals/' + Number(r.id) + '/balance').catch(() => null)));
     const owing = payable.map((r, i) => ({ r, b: bal[i] })).filter(x => x.b && Number(x.b.balance) > 0);
     noDue.classList.toggle('hidden', owing.length > 0);
@@ -46,19 +51,27 @@ async function load() {
         <p class="text-sm text-asphalt/70">Rental #${Number(r.id)} · ${esc(r.start)} to ${esc(r.end)}</p></div>${badge(r.status)}</div>
       <p class="mt-3 text-sm text-asphalt/70">Total ${money(b.total)} · paid ${money(b.paid)}${Number(b.pending) > 0 ? ' · awaiting confirmation ' + money(b.pending) : ''}</p>
       <p class="mt-1 font-display text-2xl font-extrabold">${money(b.balance)}<span class="ml-2 text-sm font-normal text-asphalt/70">left to pay</span></p>
+      ${r.paymentDueAt ? `<p class="mt-1 text-sm font-semibold ${new Date(r.paymentDueAt) < new Date() ? 'text-brick' : ''}">Pay by ${esc(dt(r.paymentDueAt))}${new Date(r.paymentDueAt) < new Date() ? ' (past due, please pay now)' : ''}</p>` : ''}
       <form data-pay="${Number(r.id)}" data-left="${Number(b.balance)}" class="mt-4 flex flex-wrap items-end gap-3 text-sm">
         <label class="font-semibold">Pay with<select name="method" class="${field} block">${METHODS.map(m => `<option>${m}</option>`).join('')}</select></label>
         <label class="font-semibold">Reference no.<input name="ref" maxlength="100" class="${field} block"></label>
         <label class="font-semibold">Amount<input name="amount" type="number" min="1" max="${Number(b.balance)}" step="0.01" value="${Number(b.balance)}" required class="${field} block w-32"></label>
+        <label class="font-semibold">Proof of payment<input name="proof" type="file" accept="image/jpeg,image/png" class="${field} block max-w-[15rem]"></label>
         <button class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Pay</button></form>
-      <p class="mt-2 text-xs text-asphalt/60">Each payment gets its own payment code to show the staff. Cash needs no reference number. For GCash, Maya, card or bank transfer, enter the reference from your receipt.</p></article>`).join('');
+      <p class="mt-2 text-xs text-asphalt/60">Each payment gets its own payment code to show the staff. Cash needs no reference number. For GCash, Maya, card or bank transfer, enter the reference from your receipt and attach a screenshot of the payment (JPG or PNG, up to 5 MB) as proof.</p></article>`).join('');
 
     empty.classList.toggle('hidden', pays.length > 0);
     rows.innerHTML = pays.map(p => `<tr class="border-b border-asphalt/10 align-top last:border-0"><td class="p-4 font-mono font-semibold tracking-wide">${esc(p.paymentCode || '#' + Number(p.id))}</td><td class="p-4">${esc(dt(p.date))}</td>
       <td class="p-4">${p.rentalId ? 'Rental #' + Number(p.rentalId) : 'Damage fee #' + Number(p.damageFeeId)}</td><td class="p-4">${esc(p.method || '—')}</td>
       <td class="p-4">${esc(p.referenceNumber || '—')}</td><td class="p-4">${money(p.amount)}</td><td class="p-4">${badge(p.status)}</td>
+      <td class="p-4">${proofCell(p)}</td>
       <td class="p-4">${p.receiptNumber ? `<a href="receipt.html?id=${Number(p.id)}" class="font-semibold text-teal underline">${esc(p.receiptNumber)}</a>` : `<span class="text-asphalt/60">${esc(NOTE[p.status] || '—')}</span>`}</td></tr>`).join('');
   } catch (e) { toast(e.message, true); }
+}
+function proofCell(p) {
+  if (p.hasProof) return `<button type="button" data-proof="${Number(p.id)}" class="font-semibold text-teal underline">View</button>`;
+  if (p.status !== 'PENDING' || p.method === 'Cash') return '<span class="text-asphalt/60">—</span>';
+  return `<label class="cursor-pointer font-semibold text-teal underline">Add proof<input type="file" data-addproof="${Number(p.id)}" accept="image/jpeg,image/png" class="hidden"></label>`;
 }
 function showCode(p) {
   codeVal.textContent = p.paymentCode; codeInfo.textContent = 'Amount ' + money(p.amount) + ' · ' + p.method + (p.referenceNumber ? ' · ref ' + p.referenceNumber : '');
@@ -66,12 +79,24 @@ function showCode(p) {
 }
 codeCopy.onclick = async () => { try { await navigator.clipboard.writeText(codeVal.textContent); toast('Code copied'); } catch { toast('Select the code and copy it.', true); } };
 due.onsubmit = async e => {
-  e.preventDefault(); const f = e.target, amount = Number(f.elements.amount.value);
+  e.preventDefault(); const f = e.target, amount = Number(f.elements.amount.value), method = f.elements.method.value, file = f.elements.proof.files[0], ref = f.elements.ref.value.trim();
   if (!(amount > 0) || amount > Number(f.dataset.left)) return toast('Enter an amount between 0 and ' + money(f.dataset.left) + '.', true);
-  try {
-    const p = await API.post('/payments', { rentalId: Number(f.dataset.pay), amount, method: f.elements.method.value, referenceNumber: f.elements.ref.value.trim() || null });
-    showCode(p); toast('Payment submitted. Show your payment code to the staff.'); load();
-  } catch (err) { toast(err.message, true); }
+  if (needsProof(method) && !ref) return toast('Enter the reference number from your payment.', true);
+  if (needsProof(method) && !file) return toast('Attach a screenshot of your payment as proof.', true);
+  const btn = f.querySelector('button'); btn.disabled = true;
+  let p;
+  try { p = await API.post('/payments', { rentalId: Number(f.dataset.pay), amount, method, referenceNumber: ref || null }); }
+  catch (err) { btn.disabled = false; return toast(err.message, true); }
+  try { if (file) await sendProof(p.id, file); showCode(p); toast('Payment submitted. Show your payment code to the staff.'); }
+  catch (err) { showCode(p); toast('Payment submitted, but the proof was not saved: ' + err.message + ' Use "Add proof" in the history below.', true); }
+  load();
+};
+// History table: view a proof, or add one to a payment that is still waiting for confirmation.
+rows.onclick = e => { const b = e.target.closest('[data-proof]'); if (b) viewProof(b.dataset.proof); };
+rows.onchange = async e => {
+  const i = e.target.closest('[data-addproof]'); if (!i || !i.files[0]) return;
+  try { await sendProof(i.dataset.addproof, i.files[0]); toast('Proof added. Staff will see it when they confirm your payment.'); load(); }
+  catch (err) { toast(err.message, true); }
 };
 load();
 </script></body></html>

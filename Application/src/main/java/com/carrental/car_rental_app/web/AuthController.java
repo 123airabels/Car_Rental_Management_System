@@ -4,8 +4,12 @@ import com.carrental.car_rental_app.security.JwtService;
 import com.carrental.car_rental_app.support.EmailService;
 import com.carrental.car_rental_app.support.PasswordPolicy;
 import com.carrental.car_rental_app.support.RateLimitService;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -44,6 +48,8 @@ public class AuthController {
 
     record AuthRequest(String name, String phone, String email, String password) {}
     record VerifyRequest(String token) {}
+    record ForgotRequest(String email) {}
+    record ResetRequest(String token, String password) {}
     record UserDto(String name, String email, String role) {}
     record AuthResponse(String token, UserDto user) {}
     record MessageResponse(String message) {}
@@ -61,6 +67,16 @@ public class AuthController {
         if (!EMAIL.matcher(email).matches()) throw ApiError.bad("Enter a valid email address.");
         PasswordPolicy.check(req.password());
 
+        // The same email signed up before but never confirmed it: don't overwrite that account (the real owner might not be the person
+        // typing now). Just send the confirmation link again so the owner can finish.
+        List<Map<String, Object>> pending = db.queryForList(
+                "SELECT first_name FROM customer WHERE lower(email) = ? AND account_status = 'Pending'", email);
+        if (!pending.isEmpty()) {
+            if (limits.isBlocked("resend:email:" + email, 3, HOUR_MS)) throw ApiError.tooMany("We already sent several links. Check your inbox and spam folder, or try again later.");
+            limits.record("resend:email:" + email, HOUR_MS);
+            mailer.sendVerification(email, String.valueOf(pending.get(0).get("first_name")), jwt.createVerifyToken(email));
+            throw ApiError.bad("That email is already registered but not confirmed yet. We sent the confirmation link again. Open it, then log in.");
+        }
         boolean taken = Boolean.TRUE.equals(db.queryForObject(
                 "SELECT EXISTS (SELECT 1 FROM customer WHERE lower(email) = ?) OR EXISTS (SELECT 1 FROM staff WHERE lower(email) = ?)",
                 Boolean.class, email, email));
@@ -95,7 +111,7 @@ public class AuthController {
             if (encoder.matches(pw, String.valueOf(row.get("password_hash")))) {
                 String status = String.valueOf(row.get("account_status"));
                 if ("Pending".equalsIgnoreCase(status))
-                    throw ApiError.forbidden("Please confirm your email first. Open the link we sent you when you created your account.");
+                    throw ApiError.forbidden("Please confirm your email first. Open the link we sent you when you created your account, or use \"Resend confirmation email\" below.");
                 if ("Active".equalsIgnoreCase(status)) {
                     limits.clear(emailKey);
                     return respond(row.get("first_name") + " " + row.get("last_name"), email, "CUSTOMER");
@@ -121,6 +137,25 @@ public class AuthController {
         throw ApiError.bad("Incorrect email or password.");
     }
 
+    /**
+     * Sends the confirmation link again to a customer who has not confirmed yet. Always answers the same way, whether or not the
+     * email has an account, so it can't be used to find out who is registered. Limited per email and per device.
+     */
+    @PostMapping("/resend-verification")
+    public MessageResponse resendVerification(@RequestBody ForgotRequest req, HttpServletRequest http) {
+        MessageResponse same = new MessageResponse("If that email has an account waiting for confirmation, we sent a new link. Check your inbox and spam folder.");
+        String email = req.email() == null ? "" : req.email().trim().toLowerCase();
+        if (!EMAIL.matcher(email).matches() || email.length() > 255) throw ApiError.bad("Enter a valid email address.");
+        String ipKey = "resend:ip:" + http.getRemoteAddr(), emailKey = "resend:email:" + email;
+        if (limits.isBlocked(ipKey, 10, HOUR_MS) || limits.isBlocked(emailKey, 3, HOUR_MS))
+            throw ApiError.tooMany("Too many requests. Please try again later.");
+        limits.record(ipKey, HOUR_MS);
+        limits.record(emailKey, HOUR_MS);
+        List<Map<String, Object>> rows = db.queryForList("SELECT first_name FROM customer WHERE lower(email) = ? AND account_status = 'Pending'", email);
+        if (!rows.isEmpty()) mailer.sendVerification(email, String.valueOf(rows.get(0).get("first_name")), jwt.createVerifyToken(email));
+        return same;
+    }
+
     /** The link in the email lands on verify.html, which calls this with the token from the URL. */
     @PostMapping("/verify-email")
     public MessageResponse verifyEmail(@RequestBody VerifyRequest req) {
@@ -137,6 +172,68 @@ public class AuthController {
                 "SELECT EXISTS (SELECT 1 FROM customer WHERE lower(email) = ? AND account_status = 'Active')", Boolean.class, email));
         if (active) return new MessageResponse("Your email is already confirmed. You can log in.");
         throw ApiError.bad("This account cannot be confirmed. Please contact support.");
+    }
+
+    /**
+     * Always answers the same way, whether or not the email has an account, so this cannot be used to find out who is registered.
+     * Only Active accounts get a link (a Pending customer must confirm the email first).
+     */
+    @PostMapping("/forgot-password")
+    public MessageResponse forgotPassword(@RequestBody ForgotRequest req, HttpServletRequest http) {
+        MessageResponse same = new MessageResponse("If that email has an account, we sent a link to reset the password. It expires in about an hour.");
+        String email = req.email() == null ? "" : req.email().trim().toLowerCase();
+        if (!EMAIL.matcher(email).matches() || email.length() > 255) throw ApiError.bad("Enter a valid email address.");
+        String ipKey = "forgot:ip:" + http.getRemoteAddr(), emailKey = "forgot:email:" + email;
+        if (limits.isBlocked(ipKey, 10, HOUR_MS) || limits.isBlocked(emailKey, 3, HOUR_MS))
+            throw ApiError.tooMany("Too many reset requests. Please try again later.");
+        limits.record(ipKey, HOUR_MS);
+        limits.record(emailKey, HOUR_MS);
+
+        for (String table : new String[] {"customer", "staff"}) {
+            List<Map<String, Object>> rows = db.queryForList(
+                    "SELECT first_name, password_hash FROM " + table + " WHERE lower(email) = ? AND account_status = 'Active'", email);
+            if (rows.isEmpty()) continue;
+            Map<String, Object> row = rows.get(0);
+            mailer.sendPasswordReset(email, String.valueOf(row.get("first_name")), jwt.createResetToken(email, fingerprint(String.valueOf(row.get("password_hash")))));
+            break;
+        }
+        return same;
+    }
+
+    /** The link in the email lands on reset-password.html, which calls this with the token from the URL and the new password. */
+    @PostMapping("/reset-password")
+    public MessageResponse resetPassword(@RequestBody ResetRequest req, HttpServletRequest http) {
+        String ipKey = "reset:ip:" + http.getRemoteAddr();
+        if (limits.isBlocked(ipKey, 20, HOUR_MS)) throw ApiError.tooMany("Too many attempts. Please try again later.");
+        limits.record(ipKey, HOUR_MS);
+
+        Claims claims;
+        try {
+            claims = jwt.parseResetToken(req.token());
+        } catch (JwtException | IllegalArgumentException e) {
+            throw ApiError.bad("This reset link is invalid or has expired. Request a new one from the log-in page.");
+        }
+        PasswordPolicy.check(req.password());
+        String email = claims.getSubject(), fp = claims.get("fp", String.class);
+        String hash = encoder.encode(req.password());
+        for (String table : new String[] {"customer", "staff"}) {
+            List<Map<String, Object>> rows = db.queryForList(
+                    "SELECT password_hash FROM " + table + " WHERE lower(email) = ? AND account_status = 'Active'", email);
+            // The fingerprint comes from the old password hash, so a link that was already used no longer matches.
+            if (rows.isEmpty() || !fingerprint(String.valueOf(rows.get(0).get("password_hash"))).equals(fp)) continue;
+            db.update("UPDATE " + table + " SET password_hash = ? WHERE lower(email) = ?", hash, email);
+            limits.clear("login:email:" + email);
+            return new MessageResponse("Your password has been changed. You can log in with it now.");
+        }
+        throw ApiError.bad("This reset link is invalid or has expired. Request a new one from the log-in page.");
+    }
+
+    private static String fingerprint(String passwordHash) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(passwordHash.getBytes(StandardCharsets.UTF_8))).substring(0, 24);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private AuthResponse respond(String name, String email, String role) {

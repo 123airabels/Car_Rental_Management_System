@@ -16,7 +16,7 @@
 <div id="footer"></div>
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script><script src="js/record.js"></script>
 <script>
-layout(); Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+layout(); Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
 const id = new URLSearchParams(location.search).get('id');
 if (!/^\d+$/.test(id || '')) { err.textContent = 'No booking selected.'; err.classList.remove('hidden'); }
 else API.get('/admin/rentals/' + id + '/record').then(r => { title.textContent = 'Rental record #' + r.id; rec.innerHTML = renderRecord(r); })

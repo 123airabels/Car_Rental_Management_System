@@ -16,7 +16,7 @@
 
   <div id="moneyBox" class="hidden">
     <h2 class="mt-8 font-display text-lg font-bold">Money</h2>
-    <div id="money" class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-5"></div>
+    <div id="money" class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
   </div>
 
   <div class="mt-8 grid gap-6 lg:grid-cols-2">
@@ -43,7 +43,7 @@
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
 <script>
 layout();
-const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
 hello.textContent = 'Signed in as ' + me.name + ' (' + me.role.replace('_', ' ').toLowerCase() + ')';
 
 // A horizontal bar chart made of plain divs: rows = [label, value, optional colour class]
@@ -59,6 +59,7 @@ const title = s => s.charAt(0) + s.slice(1).toLowerCase();
 const TILES = [
   ['pendingApprovals', 'Bookings to approve', 'bookings.html'], ['pickupsToday', 'Cars to hand over', 'bookings.html'],
   ['returnsDueToday', 'Returns due today', 'bookings.html'], ['overdueReturns', 'Overdue returns', 'bookings.html', true],
+  ['unpaidBookings', 'Unpaid bookings', 'bookings.html?pay=unpaid', true], ['overduePayments', 'Overdue payments', 'bookings.html?pay=overdue', true],
   ['licensesToReview', 'Licenses to review', 'licenses.html?status=PENDING'], ['paymentsToConfirm', 'Payments to confirm', 'transactions.html?tab=payments'],
   ['disputedFees', 'Disputed damage fees', 'damages.html', true], ['damageWithoutFee', 'Damage waiting for a fee', 'damages.html'],
   ['maintenanceOpen', 'Open maintenance jobs', 'admin.html']
@@ -78,7 +79,7 @@ async function load() {
       moneyBox.classList.remove('hidden'); revBox.classList.remove('hidden');
       const m = d.money, t = (l, v) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-2xl font-extrabold">${money(v)}</p></div>`;
       document.getElementById('money').innerHTML = t('Received this month', m.paidThisMonth) + t('Received in total', m.totalPaid) + t('Refunded', m.totalRefunded)
-        + t('Unpaid damage fees', m.unpaidDamageFees) + t('Unpaid late fees', m.unpaidLateFees);
+        + t('Unpaid rentals', m.unpaidRentals) + t('Unpaid damage fees', m.unpaidDamageFees) + t('Unpaid late fees', m.unpaidLateFees);
       rev.innerHTML = bars(m.revenueByMonth.map(x => [monthName(x.month), x.value]), money);
     }
     book.innerHTML = bars(d.bookingsByMonth.map(x => [monthName(x.month), x.value]));

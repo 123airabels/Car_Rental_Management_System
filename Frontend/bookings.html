@@ -13,10 +13,11 @@
   <form id="filters" class="mt-6 flex flex-wrap gap-3">
     <input id="q" type="search" placeholder="Search customer, email or plate" aria-label="Search bookings" class="w-full max-w-xs rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
     <select id="fs" aria-label="Filter by status" class="rounded border border-asphalt/25 bg-white px-3 py-2.5"><option value="">All statuses</option><option>Pending</option><option>Approved</option><option>Active</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select>
+    <select id="fp" aria-label="Filter by payment" class="rounded border border-asphalt/25 bg-white px-3 py-2.5"></select>
   </form>
   <div class="mt-4 overflow-x-auto rounded-lg bg-white">
     <table class="w-full text-left text-sm">
-      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">#</th><th class="p-4">Customer</th><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">License</th><th class="p-4">Status</th><th class="p-4"></th></tr></thead>
+      <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">#</th><th class="p-4">Customer</th><th class="p-4">Vehicle</th><th class="p-4">Pickup</th><th class="p-4">Return</th><th class="p-4">Total</th><th class="p-4">License</th><th class="p-4">Status</th><th class="p-4">Payment</th><th class="p-4"></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -28,9 +29,8 @@
   <div class="w-full max-w-lg rounded-lg bg-white p-6">
     <h2 id="mtitle" class="font-display text-xl font-extrabold"></h2>
     <div id="custBox" class="mt-4">
-      <label class="block text-sm font-semibold">Customer
-        <input id="cq" type="search" placeholder="Type a name or email, then pick" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
-      <select id="cust" size="4" aria-label="Customer" class="mt-2 w-full rounded border border-asphalt/25 bg-white px-3 py-2 text-sm"></select>
+      <label class="block text-sm font-semibold">Customer account
+        <select id="cust" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></select></label>
     </div>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       <label class="text-sm font-semibold">Pickup<input type="date" id="m_start" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
@@ -46,12 +46,31 @@
     </div>
   </div>
 </div>
+<!-- Reject / cancel reason -->
+<div id="rmodal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-asphalt/60 p-4" role="dialog" aria-modal="true" aria-labelledby="rtitle">
+  <div class="w-full max-w-md rounded-lg bg-white p-6">
+    <h2 id="rtitle" class="font-display text-xl font-extrabold"></h2>
+    <p class="mt-1 text-sm text-asphalt/70">The customer will see this reason.</p>
+    <label class="mt-4 block text-sm font-semibold">Reason
+      <select id="rreason" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5">
+        <option value="">Choose a reason</option><option>Missing license</option><option>Expired license</option><option>License rejected or not verified</option><option>Cancelled by customer</option><option>Customer did not show up</option><option>Vehicle not available</option><option>Vehicle under maintenance</option><option>Payment not received</option><option>Incorrect booking details</option><option>Duplicate booking</option><option value="__other">Other (write it below)</option>
+      </select></label>
+    <label class="mt-4 block text-sm font-semibold"><span id="rnoteLabel">Extra note (optional)</span>
+      <textarea id="rnote" rows="3" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 font-normal"></textarea></label>
+    <p id="rerr" class="mt-3 hidden text-sm font-semibold text-brick"></p>
+    <div class="mt-6 flex justify-end gap-3">
+      <button id="rCancel" type="button" class="rounded border border-asphalt/25 px-4 py-2 font-semibold">Back</button>
+      <button id="rOk" type="button" class="rounded bg-brick px-4 py-2 font-semibold text-white hover:brightness-110">Confirm</button>
+    </div>
+  </div>
+</div>
 <div id="footer"></div>
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
 <script>
 layout();
-const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
-const canAct = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);   // Finance can look but not change bookings
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
+const canConfirm = ['FINANCE', 'ADMIN'].includes(me.role);   // same people the API lets confirm payments
+const canAct = ['STAFF', 'ADMIN'].includes(me.role);   // Finance can look but not change bookings
 if (canAct) newBtn.classList.remove('hidden');
 const today = new Date().toISOString().slice(0, 10);
 const day = v => String(v || '').slice(0, 10);
@@ -62,7 +81,7 @@ async function load() {
   try {
     all = await API.get('/admin/rentals' + (fs.value ? '?status=' + encodeURIComponent(fs.value) : ''));
     const c = s => all.filter(r => r.status === s).length;
-    stats.innerHTML = [['Pending', c('PENDING')], ['Approved', c('APPROVED')], ['Active', c('ACTIVE')], ['Shown', all.length]]
+    stats.innerHTML = [['Pending', c('PENDING')], ['Approved', c('APPROVED')], ['Active', c('ACTIVE')], ['Unpaid / overdue', all.filter(r => ['unpaid', 'overdue', 'partial'].includes(payState(r).key)).length]]
       .map(([l, k]) => `<div class="rounded-lg bg-white p-4"><p class="text-sm text-asphalt/70">${l}</p><p class="font-display text-3xl font-extrabold">${k}</p></div>`).join('');
     draw();
   } catch (e) { toast(e.message, true); }
@@ -76,13 +95,21 @@ function actions(r) {
   if (r.status === 'PENDING') out.push(b('approve', 'Approve', 'text-teal'));
   if (['PENDING', 'APPROVED'].includes(r.status)) out.push(b('edit', 'Edit', 'text-asphalt'));
   if (r.status === 'PENDING') out.push(b('reject', 'Reject', 'text-brick'));
-  if (['PENDING', 'APPROVED'].includes(r.status)) out.push(b('cancel', 'Cancel', 'text-brick'));
+  if (r.status === 'APPROVED') out.push(b('cancel', 'Cancel', 'text-brick'));   // Pending bookings are rejected, only approved ones can be cancelled
   out.push(rec);
   return out.join(' <span class="text-asphalt/30">|</span> ');
 }
+function feeCell(r) {
+  const f = feeState(r); if (f.key === 'none') return '';
+  const sub = f.key === 'confirm'
+    ? `<br><span class="text-xs text-asphalt/60">${money(f.pending)} submitted${r.feeProof ? ' · <button type="button" data-proof="' + Number(r.feePaymentId) + '" class="font-semibold text-teal underline">View proof</button>' : ' · no proof attached'}</span>`
+      + (canConfirm && r.feePaymentId ? `<br><button type="button" data-feeconfirm="${Number(r.feePaymentId)}" class="mt-1 rounded bg-asphalt px-2 py-1 text-xs font-semibold text-white hover:bg-teal">Confirm payment</button>` : '')
+    : f.left > 0 ? `<br><span class="text-xs text-asphalt/60">${money(f.left)} left</span>` : '';
+  return `<div class="mt-2"><span class="rounded px-2 py-0.5 text-xs font-semibold ${f.cls}">${f.label}</span>${sub}</div>`;
+}
 function draw() {
   const t = q.value.trim().toLowerCase();
-  const list = all.filter(r => !t || (r.customer + ' ' + r.customerEmail + ' ' + r.plateNumber + ' ' + r.vehicle).toLowerCase().includes(t));
+  const list = all.filter(r => (!fp.value || payState(r).key === fp.value) && (!t || (r.customer + ' ' + r.customerEmail + ' ' + r.plateNumber + ' ' + r.vehicle).toLowerCase().includes(t)));
   empty.classList.toggle('hidden', list.length > 0);
   rows.innerHTML = list.map(r => `<tr class="border-b border-asphalt/10 align-top last:border-0">
     <td class="p-4 font-semibold">${Number(r.id)}</td>
@@ -91,25 +118,52 @@ function draw() {
     <td class="p-4">${esc(day(r.pickup))}</td><td class="p-4">${esc(day(r.returnBy))}</td>
     <td class="p-4">${money(r.finalCost ?? r.estimatedCost ?? 0)}</td><td class="p-4">${badge(r.licenseStatus)}</td>
     <td class="p-4">${badge(r.status)}${r.reason && ['REJECTED', 'CANCELLED'].includes(r.status) ? `<br><span class="text-xs text-asphalt/60">${esc(r.reason)}</span>` : ''}</td>
+    <td class="p-4">${payBadge(r)}${feeCell(r)}</td>
     <td class="p-4 text-right whitespace-nowrap">${actions(r)}</td></tr>`).join('');
 }
-filters.onsubmit = e => e.preventDefault(); q.oninput = draw; fs.onchange = load;
+fp.innerHTML = PAY_FILTERS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+fp.value = new URLSearchParams(location.search).get('pay') || '';   // dashboard tiles link here with ?pay=unpaid or ?pay=overdue
+if (fp.value !== '' && ![...fp.options].some(o => o.value === fp.value)) fp.value = '';
+filters.onsubmit = e => e.preventDefault(); q.oninput = draw; fs.onchange = load; fp.onchange = draw;
 
 rows.onclick = async e => {
+  const pf = e.target.closest('[data-proof]'); if (pf) return viewProof(pf.dataset.proof);
+  const fc = e.target.closest('[data-feeconfirm]');
+  if (fc) {
+    if (!confirm('Confirm that this damage fee payment was received?')) return;
+    try { await API.post('/admin/payments/' + Number(fc.dataset.feeconfirm) + '/confirm'); toast('Damage fee payment confirmed'); } catch (err) { toast(err.message, true); }
+    return load();
+  }
   const b = e.target.closest('.act'); if (!b) return;
   const id = b.dataset.id, a = b.dataset.a, r = all.find(x => x.id == id);
   try {
     if (a === 'edit') return openModal(r);
     if (a === 'approve') { if (!confirm('Approve booking #' + id + '?')) return; await API.post('/admin/rentals/' + id + '/approve'); toast('Booking approved'); }
     else {
-      const reason = prompt((a === 'reject' ? 'Reject' : 'Cancel') + ' booking #' + id + '. Reason (the customer will see it):');
+      const reason = await askReason((a === 'reject' ? 'Reject' : 'Cancel') + ' booking #' + id);
       if (reason === null) return;
-      if (!reason.trim()) return toast('Enter a reason.', true);
-      await API.post('/admin/rentals/' + id + '/' + a, { reason: reason.trim() });
+      await API.post('/admin/rentals/' + id + '/' + a, { reason });
       toast('Booking ' + (a === 'reject' ? 'rejected' : 'cancelled'));
     }
     load();
   } catch (err) { toast(err.message, true); load(); }
+};
+
+/* ---------- reject / cancel reason picker ---------- */
+let reasonDone = null;
+function askReason(title) {
+  rtitle.textContent = title; rreason.value = ''; rnote.value = ''; rerr.classList.add('hidden'); rnoteLabel.textContent = 'Extra note (optional)';
+  rmodal.classList.replace('hidden', 'flex'); rreason.focus();
+  return new Promise(res => { reasonDone = res; });
+}
+function endReason(v) { rmodal.classList.replace('flex', 'hidden'); if (reasonDone) reasonDone(v); reasonDone = null; }
+rreason.onchange = () => { rnoteLabel.textContent = rreason.value === '__other' ? 'Reason' : 'Extra note (optional)'; };
+rCancel.onclick = () => endReason(null);
+rOk.onclick = () => {
+  const note = rnote.value.trim(), pick = rreason.value;
+  if (!pick) { rerr.textContent = 'Choose a reason.'; rerr.classList.remove('hidden'); return; }
+  if (pick === '__other' && !note) { rerr.textContent = 'Write the reason.'; rerr.classList.remove('hidden'); return; }
+  endReason(pick === '__other' ? note : (note ? pick + ': ' + note : pick));
 };
 
 /* ---------- new / edit ---------- */
@@ -119,14 +173,14 @@ function openModal(r) {
   custBox.classList.toggle('hidden', !!r); apprBox.classList.toggle('hidden', !!r);
   m_start.min = m_end.min = today;
   m_start.value = r ? day(r.pickup) : ''; m_end.value = r ? day(r.returnBy) : '';
-  m_appr.checked = false; cq.value = ''; cust.innerHTML = '';
+  m_appr.checked = false;
   if (r) m_start.min = '';   // an existing pickup date may already be today or earlier
   modal.classList.replace('hidden', 'flex');
-  loadCars(); check();
+  loadCars(); check(); if (!r) loadCust();
 }
 const closeModal = () => modal.classList.replace('flex', 'hidden');
 mCancel.onclick = closeModal;
-document.onkeydown = e => e.key === 'Escape' && closeModal();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (reasonDone) endReason(null); else closeModal(); } });   // not onkeydown = ...: returning false there blocks all typing
 newBtn.onclick = () => openModal(null);
 
 const validDates = () => m_start.value && m_end.value && m_end.value > m_start.value;
@@ -139,6 +193,9 @@ async function loadCars() {
   } catch (e) { toast(e.message, true); }
   if (editing && !cars.some(c => c.id === editing.vehicleId)) cars.unshift({ id: editing.vehicleId, make: editing.vehicle, model: '' });
   cars = cars.filter(c => !['MAINTENANCE', 'RETIRED'].includes(c.status));
+  // The vehicle a customer chose can't be swapped by staff: when changing a booking only its own car is offered (reject or cancel instead).
+  if (editing) cars = cars.filter(c => c.id === editing.vehicleId);
+  m_car.disabled = !!editing;
   m_car.innerHTML = '<option value="">Choose a vehicle</option>' + cars.map(c => `<option value="${Number(c.id)}">${esc(c.make)} ${esc(c.model)}${c.category ? ' (' + esc(c.category) + ')' : ''}</option>`).join('');
   m_car.value = keep || (editing ? String(editing.vehicleId) : '');
   if (m_car.value !== (keep || (editing ? String(editing.vehicleId) : ''))) m_car.value = '';
@@ -162,18 +219,15 @@ m_start.onchange = m_end.onchange = async () => { await loadCars(); check(); };
 m_car.onchange = check;
 cust.onchange = () => { mSave.disabled = !okToSave || !cust.value; };
 
-let cqTimer;
-cq.oninput = () => {
-  clearTimeout(cqTimer);
-  cqTimer = setTimeout(async () => {
-    if (cq.value.trim().length < 2) { cust.innerHTML = ''; return; }
-    try {
-      const list = (await API.get('/admin/customers?q=' + encodeURIComponent(cq.value.trim()))).filter(c => c.status === 'ACTIVE');
-      cust.innerHTML = list.length ? list.map(c => `<option value="${Number(c.id)}">${esc(c.name)} – ${esc(c.email)}${c.licenseStatus === 'VERIFIED' ? '' : ' (license not verified)'}</option>`).join('')
-        : '<option disabled>No active customers found</option>';
-    } catch (e) { toast(e.message, true); }
-  }, 300);
-};
+// Fills the customer dropdown with every active customer account.
+async function loadCust() {
+  cust.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const list = (await API.get('/admin/customers')).filter(c => c.status === 'ACTIVE');
+    cust.innerHTML = '<option value="">Choose a customer account</option>' + list.map(c => `<option value="${Number(c.id)}">${esc(c.name)} – ${esc(c.email)}${c.licenseStatus === 'VERIFIED' ? '' : ' (license not verified)'}</option>`).join('');
+  } catch (e) { cust.innerHTML = '<option value="">Could not load customers: ' + esc(e.message) + '</option>'; }
+  mSave.disabled = !okToSave || !cust.value;
+}
 
 mSave.onclick = async () => {
   mSave.disabled = true;

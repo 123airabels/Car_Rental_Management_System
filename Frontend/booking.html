@@ -13,6 +13,8 @@
       <h1 id="title" class="font-display text-3xl font-extrabold"></h1><span id="badgeBox"></span>
     </div>
     <p id="note" class="mt-3 hidden rounded bg-white p-4 text-sm"></p>
+    <div id="payBar" class="mt-3 hidden flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-teal bg-white p-4 text-sm">
+      <p id="payMsg"></p><a href="payments.html" class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Pay now</a></div>
 
     <dl class="mt-6 grid gap-4 rounded-lg bg-white p-6 sm:grid-cols-2">
       <div><dt class="text-sm text-asphalt/70">Booking number</dt><dd id="vId" class="font-display text-xl font-extrabold"></dd></div>
@@ -56,7 +58,7 @@ function draw() {
   vId.textContent = '#' + rental.id; vStart.textContent = rental.start; vEnd.textContent = rental.end; vTotal.textContent = money(rental.total);
   vTotalLabel.textContent = ['COMPLETED', 'ACTIVE'].includes(rental.status) ? 'Total' : 'Estimated total';
   const msg = {
-    PENDING: 'Waiting for staff approval.',
+    PENDING: 'Waiting for staff approval. You do not need to pay yet; payment opens once staff approve your booking.',
     APPROVED: 'Approved. Bring your driver\'s license when you pick up the car.',
     ACTIVE: 'The car is with you. Return it by the return date to avoid a late fee.',
     COMPLETED: 'This rental is complete.',
@@ -64,6 +66,9 @@ function draw() {
     CANCELLED: 'This booking was cancelled.' + (rental.reason ? ' Reason: ' + rental.reason : '')
   }[rental.status];
   note.textContent = msg || ''; note.classList.toggle('hidden', !msg);
+  const owes = rental.status === 'APPROVED' && Number(rental.amountDue) > 0;
+  payBar.classList.toggle('hidden', !owes); payBar.classList.toggle('flex', owes);
+  if (owes) payMsg.textContent = 'Amount due: ' + money(rental.amountDue) + (rental.paymentDueAt ? '. Please pay by ' + dt(rental.paymentDueAt) + '.' : '.');
   const editable = ['PENDING', 'APPROVED'].includes(rental.status);
   change.classList.toggle('hidden', !editable);
   approvedWarn.classList.toggle('hidden', rental.status !== 'APPROVED');

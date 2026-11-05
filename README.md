@@ -261,11 +261,11 @@ Registration (with email confirmation), customer profile, contact information, a
 Pages: Frontend/profile.html (a customer own profile + history), Frontend/customers.html (staff: search the list) and Frontend/customer.html (staff: one customer - edit contact details, change status, rental history).
 GET  /api/account/profile                  logged-in customer: own profile
 PUT  /api/account/profile                  logged-in customer: edit name, phone, address (email is the login and is not editable)
-GET  /api/admin/customers?q=               Staff, Admin, System Admin: list and search
-GET  /api/admin/customers/{id}             Staff, Admin, System Admin: profile, license status, rental totals
-PUT  /api/admin/customers/{id}             Staff, Admin, System Admin: edit contact details (audit-logged)
-GET  /api/admin/customers/{id}/rentals     Staff, Admin, System Admin: full rental history
-POST /api/admin/customers/{id}/status      Admin, System Admin only: Active / Suspended
+GET  /api/admin/customers?q=               Staff, Admin: list and search
+GET  /api/admin/customers/{id}             Staff, Admin: profile, license status, rental totals
+PUT  /api/admin/customers/{id}             Staff, Admin: edit contact details (audit-logged)
+GET  /api/admin/customers/{id}/rentals     Staff, Admin: full rental history
+POST /api/admin/customers/{id}/status      Admin only: Active / Suspended
 Finance no longer has access to /api/admin/customers/**.
 
 VEHICLE MANAGEMENT (ADDED)
@@ -273,10 +273,10 @@ Pages: Frontend/admin.html (fleet list with search, status filter and counts), F
 Fields: plate number, make, model, year, color, mileage, fuel type, seating capacity, status (Available / Maintenance / Retired; Rented is set by the rental flow), type and rate adjustment.
 GET    /api/admin/vehicles                 all staff roles: list with every field
 GET    /api/admin/vehicles/{id}            all staff roles: one vehicle
-GET    /api/admin/vehicles/{id}/rentals    Staff, Admin, System Admin: rental history of one vehicle
-POST   /api/admin/vehicles                 Admin, System Admin: add
-PUT    /api/admin/vehicles/{id}            Admin, System Admin: edit
-DELETE /api/admin/vehicles/{id}            Admin, System Admin: delete. Refused if the vehicle is rented or has rental/maintenance history; set it to Retired instead (kept in the records, hidden from customers).
+GET    /api/admin/vehicles/{id}/rentals    Staff, Admin: rental history of one vehicle
+POST   /api/admin/vehicles                 Admin: add
+PUT    /api/admin/vehicles/{id}            Admin: edit
+DELETE /api/admin/vehicles/{id}            Admin: delete. Refused if the vehicle is rented or has rental/maintenance history; set it to Retired instead (kept in the records, hidden from customers).
 
 CAR DETAILS (ADDED)
 Clicking a car on vehicles.html opens its own page, Frontend/car.html: type, year, seats, fuel, color, daily rate, what to know before booking, and a booking box (dates, availability, estimated total, Reserve). Plate number and mileage are not shown to customers.
@@ -311,7 +311,7 @@ POST /api/inspections/{id}/photos (multipart: photo, description)    GET /api/in
 GET  /api/damage-fees/me                  POST /api/damage-fees/{id}/dispute {reason}
 GET  /api/categories (public)
 
-Staff, Admin, System Admin (Finance can read)
+Staff, Admin (Finance can read)
 GET  /api/admin/rentals?status=           GET /api/admin/rentals/{id}
 POST /api/admin/rentals/{id}/approve | reject {reason} | cancel {reason, refundAmount}
 POST /api/admin/rentals/{id}/pickup {mileage, fuelLevel, conditionNotes, pickupFee}
@@ -323,13 +323,15 @@ GET  /api/admin/damages | /api/admin/damage-fees
 GET  /api/admin/maintenance               POST /api/admin/maintenance, /{id}/start, /{id}/complete, /{id}/cancel
 GET  /api/admin/customers?q=              POST /api/admin/customers/{id}/status {status: Active|Suspended}
 
-Finance, Admin, System Admin
+Finance, Admin
 GET  /api/admin/payments?status=          POST /api/admin/payments (counter payment, marked Paid)
 POST /api/admin/payments/{id}/confirm | reject | refund
 GET  /api/admin/reports/summary
 
-Admin, System Admin
+Admin, System Admin (staff accounts only)
 GET|POST /api/admin/staff                 POST /api/admin/staff/{id}/status {status: Active|Inactive}
+
+Admin only
 POST /api/admin/categories, /api/admin/rates, /api/admin/vehicles      PUT /api/admin/vehicles/{id}
 GET  /api/admin/audit?limit=
 
@@ -343,7 +345,16 @@ Notes
 EMAIL CONFIRMATION (BREVO API) AND SECURITY (ADDED)
 New customers are created with account_status = 'Pending' and cannot log in until they open the confirmation link emailed to them (valid for 24 hours). The email is sent once, when the account is created, in the background (sign-up does not wait for it). Existing customers and all staff are not affected, and the database schema is unchanged.
 
-Set up the email API (one time, free: 300 emails/day, no domain needed)
+Option A (recommended, works with Gmail): send from your own Gmail
+1. In your Google Account turn on 2-Step Verification, then Security > App passwords > create one. Copy the 16 letters.
+2. In the terminal where you start the backend (PowerShell), before running mvnw:
+     $env:MAIL_USERNAME = "yourname@gmail.com"
+     $env:MAIL_PASSWORD = "the_16_letter_app_password"
+3. At startup the log should say: MAIL: connected to the SMTP server. If it says it could not log in, the app password is wrong (a normal Gmail password does not work).
+4. Emails can then go to any address, including other Gmail accounts. Check Spam the first time.
+Brevo (below) is only used when MAIL_USERNAME / MAIL_PASSWORD are not set. Brevo often fails to deliver mail that claims to come from a gmail.com sender, which is the usual reason confirmation emails never arrive.
+
+Option B: the Brevo email API (one time, free: 300 emails/day, no domain needed)
 1. Create a free account at brevo.com.
 2. Add and verify a sender: Settings > Senders, domains & dedicated IPs > Senders > Add a sender. Use an email you can open (for example your Gmail); Brevo emails you a code to verify it.
 3. Create an API key: SMTP & API > API Keys > Generate a new API key. Copy it (it is shown once).
@@ -362,9 +373,36 @@ Set up the email API (one time, free: 300 emails/day, no domain needed)
 Mail sent from a free address such as gmail.com may land in Spam. For real use, verify your own domain in Brevo.
 Never commit BREVO_API_KEY or JWT_SECRET to GitHub.
 
+Opening the confirmation link from another device (phone, another computer)
+The link in the email uses FRONTEND_URL, which defaults to 127.0.0.1, an address that only means "this laptop". To open it from another device on the same Wi-Fi:
+1. Find the laptop's address: run ipconfig in PowerShell and read the IPv4 Address of your Wi-Fi adapter, for example 192.168.1.23.
+2. Serve the front end on every network address, not just localhost. Either: python -m http.server 5500 --bind 0.0.0.0 (run in the project root), or in VS Code settings set "liveServer.settings.host": "0.0.0.0".
+3. Before starting the backend, set (replace the address with yours):
+     $env:FRONTEND_URL = "http://192.168.1.23:5500/Frontend"
+     $env:CORS_ORIGINS = "http://192.168.1.23:5500"
+4. Allow Java/Python through Windows Firewall on a Private network when Windows asks (ports 5500 and 8080).
+5. On the phone, on the same Wi-Fi, open the link from the email, or http://192.168.1.23:5500/Frontend/index.html. The front end now calls the backend at the same address on port 8080 automatically.
+This only works while the laptop is on, awake and on that network. To let anyone, anywhere, confirm their email, the backend and front end must be hosted on the internet (a cloud host, or a tunnel such as Cloudflare Tunnel or ngrok for demos).
+
+AUTOMATIC ADDRESS AND ONE-ADDRESS PUBLIC MODE (ADDED)
+By default the email link used to say 127.0.0.1 / localhost, which only works on the computer running the system. Now:
+1. Same Wi-Fi / LAN, automatic (no need to set FRONTEND_URL or look up the IP): if FRONTEND_URL is localhost (the default), the backend puts this computer's network address (e.g. http://192.168.1.20:5500) in the email, and the website talks to the API on the same address (port 8080). The startup log prints the address used.
+   - Start the frontend with python -m http.server 5500 (it listens on all network addresses), and allow ports 5500 and 8080 through Windows Firewall when asked (Private networks).
+2. From any network (mobile data, another city): the backend now also serves the website, so ONE public address is enough.
+   a. Start the backend as usual (it serves the site at http://localhost:8080; no separate frontend server is needed).
+   b. In a second terminal install ngrok (ngrok.com, free) and run:   ngrok http 8080
+      It prints an address like https://abc123.ngrok-free.app
+   c. Stop the backend, set the address (no trailing slash, no /Frontend), then start it again:
+        $env:FRONTEND_URL = "https://abc123.ngrok-free.app"
+        $env:CORS_ORIGINS = "https://abc123.ngrok-free.app"
+        .\mvnw.cmd spring-boot:run
+   d. Sign up from any device at that address. The email link is https://abc123.ngrok-free.app/verify.html?token=... and works anywhere.
+   Notes: the free ngrok address changes each time ngrok restarts, so repeat step c then. Links already emailed keep the old address. For a permanent address use your own domain (ngrok reserved domain, Cloudflare Tunnel, or a hosted server) with the same two variables.
+
 New endpoints (public)
 POST /api/auth/register            now returns {message}; no token until the email is confirmed
 POST /api/auth/verify-email {token}
+POST /api/auth/resend-verification {email}
 Front end: verify.html (the page the email link opens).
 
 Security changes
@@ -374,11 +412,11 @@ Security changes
 - Wrong email and wrong password give the same message and take similar time; the unknown-email case does a dummy password check so emails cannot be probed by timing.
 - Confirmation tokens are signed and expire; they carry no role, so they can never be used as a login token. An old link cannot re-open a suspended account.
 - API response headers: Content-Security-Policy (default-src 'none'), no-referrer, plus Spring's defaults (nosniff, frame deny, no-cache).
-- Front end: text from the server is escaped before it is put on the page (stops script injection). Finance and System Admin can now open the staff page.
+- Front end: text from the server is escaped before it is put on the page (stops script injection). Finance can now open the staff page. System Admin is technical only (staff accounts, audit log, own password) and is refused on all business endpoints.
 - Still to do before a real deployment: serve over HTTPS, move the token from localStorage to an HttpOnly cookie, and change the seeded admin password.
 
 
-The confirmation email is sent once, when the account is created. There is no resend. If it fails or the person loses it, staff can activate the account: POST /api/admin/customers/{id}/status {status: Active}.
+The confirmation email is sent when the account is created. If it is missing, the customer can use "Resend confirmation email" on the log-in page (POST /api/auth/resend-verification {email}, limited to 3 per email per hour), or sign up again with the same email, which also sends the link again. Emails are only really sent when BREVO_API_KEY and MAIL_FROM are set; otherwise the link is printed in the backend log.
 
 
 VEHICLE AVAILABILITY AND BOOKING MANAGEMENT (ADDED)
@@ -405,7 +443,7 @@ GET  /api/rentals/{id}/availability?start=&end=      would these new dates work?
 PUT  /api/rentals/{id} {start,end}                   change dates (Pending/Approved). An Approved booking goes back to Pending.
 POST /api/rentals/{id}/cancel                        cancel (Pending/Approved)
 
-Staff endpoints (Staff, Admin, System Admin; Finance can read)
+Staff endpoints (Staff, Admin; Finance can read)
 GET  /api/admin/rentals?status=&vehicleId=&q=        list and search (q = customer name, email or plate)
 GET  /api/admin/rentals/{id}                         one booking
 GET  /api/admin/rentals/{id}/availability?vehicleId=&start=&end=
@@ -446,7 +484,7 @@ GET /api/terms                                public: the current terms
 
 Transaction record
 GET /api/rentals/{id}/record                  customer: own rental (plate number hidden)
-GET /api/admin/rentals/{id}/record            Staff, Finance, Admin, System Admin: any rental
+GET /api/admin/rentals/{id}/record            Staff, Finance, Admin: any rental
 Contains: booked / approved times, customer, vehicle, dates and length, daily rate, estimated cost, pickup/return fees, late fee, final cost,
 amount paid, pickup and return (scheduled vs actual time, mileage, fuel, condition notes), terms accepted (version, time, text),
 and cancellation (Customer or staff name, reason, time, refund eligibility, amount and status). Rejections show here too.
@@ -461,7 +499,7 @@ Pages:
   Frontend/damages.html                    Staff: all damage fees (filter by status), damage still waiting for a fee, and the form to decide a dispute.
 Database: run Database/damage_dispute_resolution.sql once on an existing database (adds damage_fee.resolution_notes; schema.sql already has it).
 New / changed endpoints:
-  POST /api/admin/damage-fees/{id}/resolve-dispute   Staff, Admin, System Admin: decision UPHOLD / ADJUST (new lower amount) / WAIVE, with notes the customer can read
+  POST /api/admin/damage-fees/{id}/resolve-dispute   Staff, Admin: decision UPHOLD / ADJUST (new lower amount) / WAIVE, with notes the customer can read
   Fee flow: Assessed -> Disputed (customer, once per fee) -> Assessed or Waived (staff decision) -> Paid.
   A fee under dispute can't be edited; a damage can't be marked resolved until its fee is paid or waived.
   GET /api/rentals/{id}/inspections and GET /api/admin/damage-fees now also return disputeReason / resolutionNotes (and feePaid).
@@ -496,7 +534,7 @@ Customer:  Frontend/profile.html, "Driver's license" card.
   - Upload form: license number, type, issue and expiration dates, photo of the front and back (JPG or PNG, 5 MB each, with preview).
   - Shows the current status (Pending / Verified / Rejected), the details and the two photos. A rejection reason is shown to the customer.
   - The form appears only when the server would accept a new submission: no license yet, the last one was rejected, or the verified one has expired.
-Staff (Staff, Admin, System Admin; Finance can't review):  Frontend/licenses.html, "Licenses" in the menu.
+Staff (Staff, Admin; Finance can't review):  Frontend/licenses.html, "Licenses" in the menu.
   - Tabs: Pending / Verified / Rejected / All, with counts. ?status=PENDING and ?customerId=N are supported (the dashboard tile and the customer page link here).
   - Review dialog: details plus front and back photos (click a photo to open it full size), Verify, or Reject with a required reason (quick-pick reasons provided).
   - A pending license whose expiration date has passed can only be rejected.
@@ -505,3 +543,10 @@ Photos are protected: the browser fetches them with the log-in token (API.blobUr
 js/api.js now also sends FormData (API.upload) for file uploads.
 Note: the sample license in seed.sql points at uploads/sample/..., which doesn't exist on disk, so its photos show "Photo not available".
 Put real images at <upload-dir>/uploads/sample/license_front.jpg and license_back.jpg if you want the sample to display them.
+
+## Damage fee payments and proof of payment
+
+- A customer pays a damage fee on "My damage fees". For GCash, Maya, card or bank transfer they enter the reference number and attach a screenshot (JPG or PNG, 5 MB max) as proof; Cash needs neither. They can add a proof later from the Payments page while the payment is still waiting.
+- The Bookings page (staff side) shows a damage-fee line on each booking: Unpaid, Confirm payment (with "View proof"), or Paid. Finance and Admin get a "Confirm payment" button there; Staff can see the status only.
+- Endpoints: POST /api/payments/{id}/proof (customer, multipart field "photo"), GET /api/payments/{id}/proof (the customer who paid, or staff).
+- Existing databases: run Database/payment_proof.sql (the app also adds the payment.proof_path column on start-up).

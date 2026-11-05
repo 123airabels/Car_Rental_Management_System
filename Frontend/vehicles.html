@@ -83,7 +83,7 @@ termsOk.onchange = () => { mConfirm.disabled = !termsOk.checked; };
 API.get('/terms').then(t => { termsText.textContent = t.text; }).catch(() => {});
 const closeModal = () => modal.classList.replace('flex', 'hidden');
 mCancel.onclick = closeModal;
-document.onkeydown = e => e.key === 'Escape' && closeModal();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });   // not onkeydown = ...: returning false there blocks all typing
 mConfirm.onclick = async () => {
   mConfirm.disabled = true;
   try { await API.post('/rentals', { vehicleId: picked.id, start: start.value, end: end.value, acceptTerms: termsOk.checked }); location.href = 'dashboard.html'; }

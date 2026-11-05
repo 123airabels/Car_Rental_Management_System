@@ -29,24 +29,34 @@ public class StaffRentalController {
     private final NotificationService notifier;
     private final BookingService bookings;
     private final long graceMinutes;
+    private final long paymentDeadlineHours;
     private final BigDecimal lateMultiplier;
 
     public StaffRentalController(JdbcTemplate db, CurrentUser users, AuditService audit, NotificationService notifier, BookingService bookings,
                                  @Value("${app.rental.late-grace-minutes:60}") long graceMinutes,
+                                 @Value("${app.rental.payment-deadline-hours:24}") long paymentDeadlineHours,
                                  @Value("${app.rental.late-fee-multiplier:1.0}") BigDecimal lateMultiplier) {
         this.db = db; this.users = users; this.audit = audit; this.notifier = notifier; this.bookings = bookings;
-        this.graceMinutes = graceMinutes; this.lateMultiplier = lateMultiplier;
+        this.graceMinutes = graceMinutes; this.paymentDeadlineHours = paymentDeadlineHours; this.lateMultiplier = lateMultiplier;
     }
 
     record AdminRentalDto(int id, int customerId, String customer, String customerEmail, String customerPhone, int vehicleId,
                           String vehicle, String plateNumber, LocalDateTime pickup, LocalDateTime returnBy, LocalDateTime actualReturn,
                           BigDecimal estimatedCost, BigDecimal lateFee, BigDecimal finalCost, BigDecimal paid, String status,
-                          String licenseStatus, String reason) {}
+                          String licenseStatus, String reason, BigDecimal pending, LocalDateTime paymentDueAt,
+                          BigDecimal feeTotal, BigDecimal feePaid, BigDecimal feePending, Integer feePaymentId, boolean feeProof) {}
     record BookingRequest(Integer customerId, Integer vehicleId, String start, String end, Boolean approve) {}
     record ChangeRequest(Integer vehicleId, String start, String end) {}
     record Check(boolean available, String reason) {}
     record ReasonRequest(String reason, BigDecimal refundAmount) {}
-    record HandoverRequest(BigDecimal mileage, String fuelLevel, String conditionNotes, BigDecimal pickupFee, BigDecimal returnFee) {}
+    record ChecklistItem(String item, String condition, String notes) {}
+    record HandoverRequest(BigDecimal mileage, String fuelLevel, String conditionNotes, BigDecimal pickupFee, BigDecimal returnFee,
+                           List<ChecklistItem> checklist) {}
+    /** The parts of the car that are checked at pickup and return, and the conditions an item can be in. */
+    static final List<String> CHECK_ITEMS = List.of("Front bumper", "Rear bumper", "Hood", "Roof", "Left side & doors", "Right side & doors",
+            "Windshield & windows", "Headlights", "Tail & brake lights", "Signal lights", "Side mirrors", "Tires & wheels",
+            "Interior & seats", "Spare tire & tools");
+    static final List<String> CHECK_CONDITIONS = List.of("Good", "Scratched", "Dented", "Cracked", "Broken", "Missing");
     record HandoverResult(AdminRentalDto rental, int inspectionId, BigDecimal lateFee) {}
     private record Locked(int customerId, int vehicleId, String status, LocalDateTime pickup, LocalDateTime returnBy,
                           BigDecimal estimated, BigDecimal pickupFee, BigDecimal returnFee) {}
@@ -57,17 +67,41 @@ public class StaffRentalController {
                r.pickup_datetime, r.return_datetime, r.actual_return_datetime,
                r.estimated_cost, r.late_fee, r.final_cost, r.rental_status,
                (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.rental_id = r.rental_id AND p.payment_status = 'Paid') AS paid,
+               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.rental_id = r.rental_id AND p.payment_status = 'Pending') AS pending,
+               (SELECT COALESCE(SUM(f.amount), 0) FROM damage_fee f JOIN damage_incident d ON d.damage_id = f.damage_id
+                 JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id
+                 WHERE i.rental_id = r.rental_id AND f.fee_status IN ('Assessed', 'Disputed', 'Paid')) AS fee_total,
+               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p JOIN damage_fee f ON f.damage_fee_id = p.damage_fee_id JOIN damage_incident d ON d.damage_id = f.damage_id
+                 JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id WHERE i.rental_id = r.rental_id AND p.payment_status = 'Paid') AS fee_paid,
+               (SELECT COALESCE(SUM(p.amount), 0) FROM payment p JOIN damage_fee f ON f.damage_fee_id = p.damage_fee_id JOIN damage_incident d ON d.damage_id = f.damage_id
+                 JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id WHERE i.rental_id = r.rental_id AND p.payment_status = 'Pending') AS fee_pending,
+               (SELECT MIN(p.payment_id) FROM payment p JOIN damage_fee f ON f.damage_fee_id = p.damage_fee_id JOIN damage_incident d ON d.damage_id = f.damage_id
+                 JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id WHERE i.rental_id = r.rental_id AND p.payment_status = 'Pending') AS fee_payment_id,
+               (SELECT bool_or(p.proof_path IS NOT NULL) FROM payment p JOIN damage_fee f ON f.damage_fee_id = p.damage_fee_id JOIN damage_incident d ON d.damage_id = f.damage_id
+                 JOIN vehicle_inspection i ON i.inspection_id = d.inspection_id WHERE i.rental_id = r.rental_id AND p.payment_status = 'Pending') AS fee_proof,
+               r.approved_at,
                (SELECT d.verification_status FROM driver_license d WHERE d.customer_id = r.customer_id ORDER BY d.license_id DESC LIMIT 1) AS license_status,
                (SELECT x.cancellation_reason FROM cancellation x WHERE x.rental_id = r.rental_id ORDER BY x.cancellation_id DESC LIMIT 1) AS reason
         FROM rental r JOIN customer c ON c.customer_id = r.customer_id JOIN vehicle v ON v.vehicle_id = r.vehicle_id
         """;
 
-    private static AdminRentalDto map(java.sql.ResultSet rs) throws java.sql.SQLException {
+    /** Same deadline the customer sees: approval time plus the configured hours, never later than the end of the pickup day. */
+    private LocalDateTime paymentDeadline(java.sql.ResultSet rs) throws java.sql.SQLException {
+        LocalDateTime approved = Rows.ldt(rs, "approved_at"), pickup = Rows.ldt(rs, "pickup_datetime");
+        if (approved == null || !"APPROVED".equals(Rows.up(rs.getString("rental_status")))) return null;
+        LocalDateTime deadline = approved.plusHours(paymentDeadlineHours), lastDay = pickup.toLocalDate().atTime(23, 59);
+        return deadline.isAfter(lastDay) ? lastDay : deadline;
+    }
+
+    private AdminRentalDto map(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new AdminRentalDto(rs.getInt("rental_id"), rs.getInt("customer_id"), rs.getString("customer"), rs.getString("email"),
                 rs.getString("phone_number"), rs.getInt("vehicle_id"), rs.getString("vehicle"), rs.getString("plate_number"),
                 Rows.ldt(rs, "pickup_datetime"), Rows.ldt(rs, "return_datetime"), Rows.ldt(rs, "actual_return_datetime"),
                 rs.getBigDecimal("estimated_cost"), rs.getBigDecimal("late_fee"), rs.getBigDecimal("final_cost"),
-                rs.getBigDecimal("paid"), Rows.up(rs.getString("rental_status")), Rows.up(rs.getString("license_status")), rs.getString("reason"));
+                rs.getBigDecimal("paid"), Rows.up(rs.getString("rental_status")), Rows.up(rs.getString("license_status")), rs.getString("reason"),
+                rs.getBigDecimal("pending"), paymentDeadline(rs),
+                rs.getBigDecimal("fee_total"), rs.getBigDecimal("fee_paid"), rs.getBigDecimal("fee_pending"), Rows.intOrNull(rs, "fee_payment_id"),
+                rs.getBoolean("fee_proof"));
     }
 
     /** All bookings, newest first. Filters: status, vehicleId, q (customer name, email or plate number). */
@@ -139,7 +173,8 @@ public class StaffRentalController {
     }
 
     /**
-     * Changes the car and/or dates of a Pending or Approved booking. An approved booking stays approved
+     * Changes the dates of a Pending or Approved booking. The car the customer chose can't be swapped by Staff or Admin;
+     * if it can't be provided, the booking is rejected or cancelled and the customer books again. An approved booking stays approved
      * (staff are making the change) as long as the license still covers the new return date.
      */
     @PutMapping("/{id}")
@@ -149,7 +184,9 @@ public class StaffRentalController {
         Locked r = lock(id);
         if (!List.of("Pending", "Approved").contains(r.status()))
             throw ApiError.conflict("A rental that is " + r.status().toLowerCase() + " can't be changed.");
-        int vehicleId = req.vehicleId() != null ? req.vehicleId() : r.vehicleId();
+        if (req.vehicleId() != null && req.vehicleId() != r.vehicleId())
+            throw ApiError.conflict("The customer's chosen vehicle can't be changed. Reject or cancel the booking instead, and the customer can book another vehicle.");
+        int vehicleId = r.vehicleId();
         LocalDate oldStart = r.pickup().toLocalDate();
         LocalDate start = Rows.blank(req.start()) ? oldStart : Rows.date(req.start(), "Enter the pickup date as 2026-12-31.");
         LocalDate end = Rows.blank(req.end()) ? r.returnBy().toLocalDate() : Rows.date(req.end(), "Enter the return date as 2026-12-31.");
@@ -183,7 +220,8 @@ public class StaffRentalController {
         if (clash != null) throw ApiError.conflict(clash);
         db.update("UPDATE rental SET rental_status = 'Approved', approved_at = CURRENT_TIMESTAMP WHERE rental_id = ?", id);
         audit.log(staff, "APPROVE", "rental", id, "Approved rental " + id);
-        notifier.notifyCustomer(r.customerId(), "Booking approved", "Your booking #" + id + " has been approved.");
+        notifier.notifyCustomer(r.customerId(), "Booking approved", "Your booking #" + id + " has been approved. Please pay the amount due within "
+                + paymentDeadlineHours + " hours (and before pickup). You can pay from the Payments page.");
         return one(id);
     }
 
@@ -196,7 +234,7 @@ public class StaffRentalController {
     @PostMapping("/{id}/cancel")
     @Transactional
     public AdminRentalDto cancel(@PathVariable int id, @RequestBody ReasonRequest req, Authentication a) {
-        return close(id, req, a, "Cancelled", List.of("Pending", "Approved"));
+        return close(id, req, a, "Cancelled", List.of("Approved"));   // a Pending booking is rejected, not cancelled
     }
 
     private AdminRentalDto close(int id, ReasonRequest req, Authentication a, String newStatus, List<String> allowedFrom) {
@@ -235,7 +273,9 @@ public class StaffRentalController {
         if (mileage != null && recorded != null && mileage.compareTo(recorded) < 0)
             throw ApiError.bad("That mileage is lower than the vehicle's recorded mileage (" + recorded + ").");
 
+        validateChecklist(req.checklist());
         int inspectionId = inspection(id, "Pickup", mileage, req.fuelLevel(), req.conditionNotes(), staff);
+        saveChecklist(inspectionId, req.checklist());
         db.update("UPDATE rental SET rental_status = 'Active', pickup_fee = COALESCE(?::numeric, pickup_fee) WHERE rental_id = ?", req.pickupFee(), id);
         db.update("UPDATE vehicle SET status = 'Rented', mileage = COALESCE(?::numeric, mileage) WHERE vehicle_id = ?", mileage, r.vehicleId());
         audit.log(staff, "STATUS", "vehicle", r.vehicleId(), "Vehicle " + r.vehicleId() + " status Available -> Rented (rental " + id + ")");
@@ -276,7 +316,9 @@ public class StaffRentalController {
         BigDecimal estimated = r.estimated() == null ? BigDecimal.ZERO : r.estimated();
         BigDecimal finalCost = estimated.add(r.pickupFee()).add(returnFee).add(lateFee);
 
+        validateChecklist(req.checklist());
         int inspectionId = inspection(id, "Return", req.mileage(), req.fuelLevel(), req.conditionNotes(), staff);
+        saveChecklist(inspectionId, req.checklist());
         db.update("UPDATE rental SET rental_status = 'Completed', actual_return_datetime = ?, late_fee = ?, late_fee_status = ?,"
                 + " return_fee = ?, final_cost = ? WHERE rental_id = ?",
                 now, lateFee, lateFee.signum() > 0 ? "Unpaid" : null, returnFee, finalCost, id);
@@ -304,6 +346,24 @@ public class StaffRentalController {
                         rs.getBigDecimal("pickup_fee"), rs.getBigDecimal("return_fee")), id);
         if (rows.isEmpty()) throw ApiError.notFound("Rental not found.");
         return rows.get(0);
+    }
+
+    /** Every part of the car must be marked, so a missing entry can't hide a dent or a broken light. */
+    private static void validateChecklist(List<ChecklistItem> list) {
+        if (list == null || list.size() != CHECK_ITEMS.size()) throw ApiError.bad("Complete the condition checklist: mark every part of the car.");
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (ChecklistItem c : list) {
+            if (c == null || c.item() == null || !CHECK_ITEMS.contains(c.item()) || !seen.add(c.item()))
+                throw ApiError.bad("The condition checklist has an unknown or repeated item.");
+            if (c.condition() == null || !CHECK_CONDITIONS.contains(c.condition())) throw ApiError.bad("Choose a condition for " + c.item() + ".");
+            if (c.notes() != null && c.notes().length() > 200) throw ApiError.bad("Notes for " + c.item() + " are too long (200 characters at most).");
+        }
+    }
+
+    private void saveChecklist(int inspectionId, List<ChecklistItem> list) {
+        for (ChecklistItem c : list)
+            db.update("INSERT INTO inspection_item (inspection_id, item_name, item_condition, notes) VALUES (?,?,?,?)",
+                    inspectionId, c.item(), c.condition(), Rows.clean(c.notes()));
     }
 
     private int inspection(int rentalId, String type, BigDecimal mileage, String fuel, String notes, int staffId) {

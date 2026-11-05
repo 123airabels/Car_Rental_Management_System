@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,16 +13,26 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Numbers for the staff dashboard. Open to every staff role (see SecurityConfig: GET /api/admin/**),
- * but money figures are only included for Finance, Admin and System Admin, and recent activity only for Admin and System Admin.
+ * but money figures are only included for Finance and Admin, and recent activity only for Admin (System Admin has no access to the dashboard).
  */
 @RestController
 public class DashboardController {
-    private static final Set<String> MONEY = Set.of("FINANCE", "ADMIN", "SYSTEM_ADMIN");
-    private static final Set<String> ACTIVITY = Set.of("ADMIN", "SYSTEM_ADMIN");
+    private static final Set<String> MONEY = Set.of("FINANCE", "ADMIN");
+    private static final Set<String> ACTIVITY = Set.of("ADMIN");
     private final JdbcTemplate db;
     private final CurrentUser users;
+    private final long paymentDeadlineHours;
 
-    public DashboardController(JdbcTemplate db, CurrentUser users) { this.db = db; this.users = users; }
+    public DashboardController(JdbcTemplate db, CurrentUser users, @Value("${app.rental.payment-deadline-hours:24}") long paymentDeadlineHours) {
+        this.db = db; this.users = users; this.paymentDeadlineHours = paymentDeadlineHours;
+    }
+
+    /** Approved, active or completed rentals whose paid + pending payments do not yet cover the total (same rule as the Bookings page badge). */
+    private static final String UNPAID = """
+        FROM rental r WHERE r.rental_status IN ('Approved', 'Active', 'Completed')
+          AND COALESCE(r.final_cost, r.estimated_cost, 0) >
+              (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.rental_id = r.rental_id AND p.payment_status IN ('Paid', 'Pending'))
+        """;
 
     private int count(String sql) {
         Integer n = db.queryForObject(sql, Integer.class);
@@ -47,6 +58,10 @@ public class DashboardController {
         todo.put("returnsDueToday", count("SELECT count(*) FROM rental WHERE rental_status = 'Active' AND return_datetime::date = CURRENT_DATE"));
         todo.put("overdueReturns", count("SELECT count(*) FROM rental WHERE rental_status = 'Active' AND return_datetime < CURRENT_TIMESTAMP"));
         todo.put("licensesToReview", count("SELECT count(*) FROM driver_license WHERE verification_status = 'Pending'"));
+        todo.put("unpaidBookings", count("SELECT count(*) " + UNPAID));
+        // Approved bookings whose payment deadline (approval + configured hours, never later than the end of the pickup day) has passed
+        todo.put("overduePayments", count("SELECT count(*) " + UNPAID + " AND r.rental_status = 'Approved' AND r.approved_at IS NOT NULL AND LEAST(r.approved_at + interval '"
+                + paymentDeadlineHours + " hours', r.pickup_datetime::date + interval '1 day' - interval '1 minute') < CURRENT_TIMESTAMP"));
         todo.put("paymentsToConfirm", count("SELECT count(*) FROM payment WHERE payment_status = 'Pending'"));
         todo.put("disputedFees", count("SELECT count(*) FROM damage_fee WHERE fee_status = 'Disputed'"));
         todo.put("damageWithoutFee", count("SELECT count(*) FROM damage_incident d WHERE d.status <> 'Resolved' AND NOT EXISTS (SELECT 1 FROM damage_fee f WHERE f.damage_id = d.damage_id)"));
@@ -84,6 +99,8 @@ public class DashboardController {
             money.put("totalPaid", db.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM payment WHERE payment_status = 'Paid'", java.math.BigDecimal.class));
             money.put("totalRefunded", db.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM payment WHERE payment_status = 'Refunded'", java.math.BigDecimal.class));
             money.put("unpaidDamageFees", db.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM damage_fee WHERE fee_status IN ('Assessed','Disputed')", java.math.BigDecimal.class));
+            money.put("unpaidRentals", db.queryForObject("SELECT COALESCE(SUM(COALESCE(r.final_cost, r.estimated_cost, 0) - (SELECT COALESCE(SUM(p.amount), 0) FROM payment p WHERE p.rental_id = r.rental_id AND p.payment_status = 'Paid')), 0) "
+                    + UNPAID, java.math.BigDecimal.class));
             money.put("unpaidLateFees", db.queryForObject("SELECT COALESCE(SUM(late_fee), 0) FROM rental WHERE late_fee_status = 'Unpaid'", java.math.BigDecimal.class));
             money.put("revenueByMonth", db.query("""
                 SELECT to_char(m, 'YYYY-MM') AS month, COALESCE(SUM(p.amount), 0) AS n

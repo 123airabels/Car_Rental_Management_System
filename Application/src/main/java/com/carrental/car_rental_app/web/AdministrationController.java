@@ -28,11 +28,43 @@ public class AdministrationController {
 
     record StaffRequest(String firstName, String lastName, String email, String password, String role) {}
     record StatusRequest(String status) {}
+    record RoleRequest(String role) {}
     record StaffDto(int id, String firstName, String lastName, String email, String role, String status, LocalDateTime createdAt) {}
     record CustomerDto(int id, String name, String email, String phone, String status, LocalDateTime createdAt, String licenseStatus) {}
     record AuditDto(int id, String staff, String action, String table, Integer recordId, String description, LocalDateTime at) {}
 
     private static final List<String> ROLES = List.of("Staff", "Finance", "Admin", "System Admin");
+    /** Roles an Admin may create and manage. Only a System Admin can create or change Admin and System Admin accounts. */
+    private static final List<String> ADMIN_MANAGEABLE = List.of("Staff", "Finance");
+
+    private boolean isSystemAdmin(Authentication a) { return "SYSTEM_ADMIN".equals(users.role(a)); }
+
+    /** Resolves a typed role to its canonical name and checks the caller is allowed to hand it out. */
+    private String grantableRole(String requested, Authentication a) {
+        String wanted = requested == null ? "" : requested.trim();
+        String role = ROLES.stream().filter(x -> x.equalsIgnoreCase(wanted)).findFirst()
+                .orElseThrow(() -> ApiError.bad("Role must be Staff, Finance, Admin, or System Admin."));
+        if (!isSystemAdmin(a) && !ADMIN_MANAGEABLE.contains(role))
+            throw ApiError.forbidden("Only a System Admin can create or assign the " + role + " role.");
+        return role;
+    }
+
+    /** Looks up an account's current role, and refuses if the caller is an Admin and the target is an Admin or System Admin. */
+    private String manageableTargetRole(int id, Authentication a) {
+        List<String> found = db.queryForList("SELECT role FROM staff WHERE staff_id = ?", String.class, id);
+        if (found.isEmpty()) throw ApiError.notFound("Staff member not found.");
+        String current = found.get(0);
+        if (!isSystemAdmin(a) && !ADMIN_MANAGEABLE.contains(current))
+            throw ApiError.forbidden("Only a System Admin can change " + current + " accounts.");
+        return current;
+    }
+
+    /** Keeps at least one active System Admin so the system can never lock itself out of account management. */
+    private void requireAnotherSystemAdmin(int excludingId) {
+        Integer others = db.queryForObject(
+                "SELECT COUNT(*) FROM staff WHERE role = 'System Admin' AND account_status = 'Active' AND staff_id <> ?", Integer.class, excludingId);
+        if (others == null || others == 0) throw ApiError.conflict("There must be at least one active System Admin.");
+    }
 
     // ---------- staff accounts ----------
 
@@ -50,9 +82,7 @@ public class AdministrationController {
         if (Rows.blank(r.firstName()) || Rows.blank(r.lastName()) || Rows.blank(r.email()))
             throw ApiError.bad("Enter first name, last name, and email.");
         if (r.password() == null || r.password().length() < 8) throw ApiError.bad("The password must be at least 8 characters.");
-        String wanted = r.role() == null ? "" : r.role().trim();
-        String role = ROLES.stream().filter(x -> x.equalsIgnoreCase(wanted)).findFirst()
-                .orElseThrow(() -> ApiError.bad("Role must be Staff, Finance, Admin, or System Admin."));
+        String role = grantableRole(r.role(), a);
         String email = r.email().trim().toLowerCase();
         boolean taken = Boolean.TRUE.equals(db.queryForObject(
                 "SELECT EXISTS (SELECT 1 FROM customer WHERE lower(email) = ?) OR EXISTS (SELECT 1 FROM staff WHERE lower(email) = ?)",
@@ -72,10 +102,26 @@ public class AdministrationController {
         int me = users.staffId(a);
         String status = pick(r.status(), "Active", "Inactive");
         if (me == id) throw ApiError.bad("You can't change your own status.");
-        int n = db.update("UPDATE staff SET account_status = ? WHERE staff_id = ?", status, id);
-        if (n == 0) throw ApiError.notFound("Staff member not found.");
-        audit.log(me, "UPDATE", "staff", id, "Set staff " + id + " to " + status);
+        String target = manageableTargetRole(id, a);
+        if ("Inactive".equals(status) && "System Admin".equals(target)) requireAnotherSystemAdmin(id);
+        db.update("UPDATE staff SET account_status = ? WHERE staff_id = ?", status, id);
+        audit.log(me, "UPDATE", "staff", id, "Set staff " + id + " (" + target + ") to " + status);
         return Map.of("status", status.toUpperCase());
+    }
+
+    /** Changes a staff member's role. Admins can only move people between Staff and Finance. */
+    @PostMapping("/staff/{id}/role")
+    @Transactional
+    public Map<String, String> staffRole(@PathVariable int id, @RequestBody RoleRequest r, Authentication a) {
+        int me = users.staffId(a);
+        if (me == id) throw ApiError.bad("You can't change your own role.");
+        String role = grantableRole(r.role(), a);
+        String current = manageableTargetRole(id, a);
+        if (current.equals(role)) return Map.of("role", role);
+        if ("System Admin".equals(current)) requireAnotherSystemAdmin(id);
+        db.update("UPDATE staff SET role = ? WHERE staff_id = ?", role, id);
+        audit.log(me, "UPDATE", "staff", id, "Changed role of staff " + id + " from " + current + " to " + role);
+        return Map.of("role", role);
     }
 
     // ---------- customers ----------

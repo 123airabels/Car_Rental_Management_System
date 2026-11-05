@@ -25,12 +25,17 @@
 <script>
 layout();
 const me = Auth.require();
-const isStaff = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN', 'FINANCE'].includes(me.role);
-const canAct = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const isStaff = ['STAFF', 'ADMIN', 'FINANCE'].includes(me.role);
+const canAct = ['STAFF', 'ADMIN'].includes(me.role);
 const rid = new URLSearchParams(location.search).get('id');
 const FUEL = ['Empty', '1/4', '1/2', '3/4', 'Full'];
 const SEVERITY = ['Minor', 'Moderate', 'Major'];
 const METHODS = ['GCash', 'Maya', 'Card', 'Bank Transfer', 'Cash'];
+const CHECK_ITEMS = ['Front bumper', 'Rear bumper', 'Hood', 'Roof', 'Left side & doors', 'Right side & doors', 'Windshield & windows', 'Headlights',
+  'Tail & brake lights', 'Signal lights', 'Side mirrors', 'Tires & wheels', 'Interior & seats', 'Spare tire & tools'];
+const CONDITIONS = ['Good', 'Scratched', 'Dented', 'Cracked', 'Broken', 'Missing'];
+const RANK = { Good: 0, Scratched: 1, Dented: 2, Cracked: 2, Broken: 3, Missing: 3 };
+const COND_CLS = { Good: 'bg-teal/10 text-teal', Scratched: 'bg-line/40 text-asphalt', Dented: 'bg-brick/10 text-brick', Cracked: 'bg-brick/10 text-brick', Broken: 'bg-brick text-white', Missing: 'bg-brick text-white' };
 let rental = null, insp = [];
 
 back.href = isStaff ? 'bookings.html' : 'dashboard.html';
@@ -60,16 +65,22 @@ function draw() {
   const driven = a && b && a.mileage != null && b.mileage != null ? Number(b.mileage) - Number(a.mileage) : null;
   const fuelChange = a && b && a.fuelLevel && b.fuelLevel ? (a.fuelLevel === b.fuelLevel ? 'Same' : a.fuelLevel + ' → ' + b.fuelLevel) : '—';
   const dmg = insp.flatMap(i => i.damages);
+  const newIssues = a && b ? worse(a, b).length : null;
   const owed = dmg.filter(d => ['ASSESSED', 'DISPUTED'].includes(d.feeStatus)).reduce((s, d) => s + Number(d.feeAmount) - Number(d.feePaid || 0), 0);
   summary.innerHTML = stat('Rental status', badge(rental.status)) + stat('Distance driven', driven == null ? '—' : km(driven))
-    + stat('Fuel change', esc(fuelChange)) + stat('Damage fees due', dmg.length ? money(owed) : '—');
-  colPickup.innerHTML = column('Before rental', 'Pickup', a, rental.status === 'APPROVED');
-  colReturn.innerHTML = column('After rental', 'Return', b, rental.status === 'ACTIVE');
+    + stat('Fuel change', esc(fuelChange)) + (newIssues == null ? '' : stat('New issues since pickup', newIssues > 0 ? `<span class="text-brick">${newIssues}</span>` : '0')) + stat('Damage fees due', dmg.length ? money(owed) : '—');
+  colPickup.innerHTML = column('Before rental', 'Pickup', a, rental.status === 'APPROVED', null);
+  colReturn.innerHTML = column('After rental', 'Return', b, rental.status === 'ACTIVE', a);
   document.querySelectorAll('img[data-photo]').forEach(img => loadPhoto(img));
 }
 
 /* ---------- one column: either the inspection, or the form to record it, or "not yet" ---------- */
-function column(title, type, i, canRecord) {
+/* Items that are in a worse condition on the return inspection than they were at pickup. */
+function worse(pick, ret) {
+  const was = Object.fromEntries((pick.checklist || []).map(c => [c.item, c.condition]));
+  return (ret.checklist || []).filter(c => (RANK[c.condition] ?? 0) > (RANK[was[c.item]] ?? 0));
+}
+function column(title, type, i, canRecord, base) {
   const head = `<h2 class="font-display text-xl font-bold">${title}</h2>`;
   if (!i) {
     const body = canAct && canRecord ? handoverForm(type)
@@ -82,7 +93,7 @@ function column(title, type, i, canRecord) {
       ${row('Condition notes', esc(i.conditionNotes || '—'))}
       ${row('Customer notes', esc(i.customerNotes || '—'))}
     </dl>
-    ${photoBlock(i)}${notesBlock(i)}${damageBlock(i)}</div>`;
+    ${checklistBlock(i, base)}${photoBlock(i)}${notesBlock(i)}${damageBlock(i)}</div>`;
 }
 
 function handoverForm(type) {
@@ -92,8 +103,28 @@ function handoverForm(type) {
       : 'Record the car\'s condition on return. Saving this closes the rental and works out any late fee.'}</p>
     <label class="font-semibold">Mileage (km)<input name="mileage" type="number" min="0" step="0.1" class="${field}"></label>
     <label class="font-semibold">Fuel level<select name="fuelLevel" class="${field}"><option value="">Select…</option>${FUEL.map(f => `<option>${f}</option>`).join('')}</select></label>
+    <fieldset class="rounded border border-asphalt/15 p-3"><legend class="px-1 font-semibold">Condition checklist</legend>
+      <p class="mb-2 text-xs text-asphalt/70">Mark every part of the car. Anything that is not Good needs a short note and a photo as evidence.</p>
+      <div class="grid gap-2">${CHECK_ITEMS.map((n, k) => `<div class="grid grid-cols-[1fr_7.5rem] items-center gap-2 sm:grid-cols-[9rem_7.5rem_1fr]">
+        <label for="c_${k}" class="font-medium">${esc(n)}</label>
+        <select id="c_${k}" name="c_${k}" class="${field} !mt-0 !py-1.5">${CONDITIONS.map(c => `<option>${c}</option>`).join('')}</select>
+        <input name="n_${k}" maxlength="200" aria-label="Note for ${esc(n)}" placeholder="Note (e.g. left headlight cracked)" class="${field} !mt-0 !py-1.5 col-span-2 sm:col-span-1"></div>`).join('')}</div></fieldset>
+    <label class="font-semibold">Photos as evidence (JPG or PNG, up to 20)<input name="photos" type="file" multiple accept="image/jpeg,image/png" class="mt-1 block text-sm"></label>
     <label class="font-semibold">Condition notes<textarea name="conditionNotes" rows="3" maxlength="2000" placeholder="Scratches, dents, cleanliness, warning lights…" class="${field}"></textarea></label>
     <button class="${btn} justify-self-start">${pick ? 'Save pickup &amp; hand over car' : 'Save return &amp; close rental'}</button></form>`;
+}
+
+function checklistBlock(i, base) {
+  const list = i.checklist || [];
+  if (!list.length) return '<h3 class="mt-5 font-semibold">Condition checklist</h3><p class="mt-1 text-sm text-asphalt/60">No checklist was recorded for this inspection.</p>';
+  const was = base ? Object.fromEntries((base.checklist || []).map(c => [c.item, c.condition])) : {};
+  const bad = list.filter(c => c.condition !== 'Good').length;
+  return `<h3 class="mt-5 font-semibold">Condition checklist <span class="font-normal ${bad ? 'text-brick' : 'text-asphalt/60'}">(${bad ? bad + ' with issues' : 'all good'})</span></h3>
+    <ul class="mt-2 divide-y divide-asphalt/10 text-sm">${list.map(c => {
+      const isNew = base && (RANK[c.condition] ?? 0) > (RANK[was[c.item]] ?? 0);
+      return `<li class="flex flex-wrap items-center justify-between gap-2 py-1.5"><span>${esc(c.item)}${c.notes ? `<br><span class="text-xs text-asphalt/60">${esc(c.notes)}</span>` : ''}</span>
+        <span class="flex items-center gap-2">${isNew ? '<span class="rounded bg-brick px-2 py-0.5 text-xs font-semibold text-white">New since pickup</span>' : ''}<span class="rounded px-2 py-0.5 text-xs font-semibold ${COND_CLS[c.condition] || ''}">${esc(c.condition)}</span></span></li>`;
+    }).join('')}</ul>`;
 }
 
 function photoBlock(i) {
@@ -171,6 +202,12 @@ async function loadPhoto(img) {
     img.onclick = () => window.open(img.src, '_blank');
   } catch { img.alt = 'Photo could not be loaded'; }
 }
+async function uploadFile(inspectionId, file, description) {
+  const fd = new FormData(); fd.append('photo', file); fd.append('description', description);
+  const res = await fetch(CONFIG.API_URL + '/inspections/' + inspectionId + '/photos', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }, body: fd });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Upload failed (' + res.status + ')'); }
+}
 async function upload(form) {
   const fd = new FormData(form);
   const res = await fetch(CONFIG.API_URL + '/inspections/' + form.dataset.photoForm + '/photos', {
@@ -185,9 +222,18 @@ document.addEventListener('submit', async e => {
   try {
     if (f.dataset.handover) {
       if (!v('fuelLevel')) return toast('Select the fuel level.', true);
+      const checklist = CHECK_ITEMS.map((n, k) => ({ item: n, condition: f.elements['c_' + k].value, notes: v('n_' + k) }));
+      const issues = checklist.filter(c => c.condition !== 'Good');
+      const photos = [...f.elements.photos.files];
+      if (issues.some(c => !c.notes)) return toast('Add a short note for every item that is not Good.', true);
+      if (issues.length && !photos.length) return toast('Add at least one photo as evidence of the ' + issues.length + ' item(s) that are not Good.', true);
+      if (photos.length > 20) return toast('Up to 20 photos.', true);
       if (!confirm(f.dataset.handover === 'pickup' ? 'Hand the car over to the customer?' : 'Close this rental and take the car back?')) return;
       const r = await API.post('/admin/rentals/' + rid + '/' + f.dataset.handover,
-        { mileage: v('mileage') === '' ? null : Number(v('mileage')), fuelLevel: v('fuelLevel'), conditionNotes: v('conditionNotes') });
+        { mileage: v('mileage') === '' ? null : Number(v('mileage')), fuelLevel: v('fuelLevel'), conditionNotes: v('conditionNotes'), checklist });
+      let failed = 0;
+      for (const p of photos) { try { await uploadFile(r.inspectionId, p, (f.dataset.handover === 'pickup' ? 'Pickup' : 'Return') + ' photo'); } catch { failed++; } }
+      if (failed) toast(failed + ' photo(s) could not be uploaded. Add them below.', true);
       toast(f.dataset.handover === 'pickup' ? 'Pickup recorded' : 'Return recorded' + (Number(r.lateFee) > 0 ? ' – late fee ' + money(r.lateFee) : ''));
     } else if (f.dataset.photoForm) { await upload(f); toast('Photo uploaded'); }
     else if (f.dataset.notes) { await API.post('/inspections/' + f.dataset.notes + '/notes', { notes: v('notes') }); toast('Notes saved'); }

@@ -2,6 +2,7 @@ package com.carrental.car_rental_app.web;
 
 import com.carrental.car_rental_app.support.AuditService;
 import com.carrental.car_rental_app.support.CurrentUser;
+import com.carrental.car_rental_app.support.FileStorage;
 import com.carrental.car_rental_app.support.NotificationService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,10 +10,13 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Payments for rentals and damage fees. A customer submits a payment (status Pending) and gets a unique payment code (PAY-XXXXXX) to show or quote to the staff;
@@ -25,14 +29,15 @@ public class PaymentController {
     private final CurrentUser users;
     private final AuditService audit;
     private final NotificationService notifier;
+    private final FileStorage files;
 
-    public PaymentController(JdbcTemplate db, CurrentUser users, AuditService audit, NotificationService notifier) {
-        this.db = db; this.users = users; this.audit = audit; this.notifier = notifier;
+    public PaymentController(JdbcTemplate db, CurrentUser users, AuditService audit, NotificationService notifier, FileStorage files) {
+        this.db = db; this.users = users; this.audit = audit; this.notifier = notifier; this.files = files;
     }
 
     record PaymentRequest(Integer rentalId, Integer damageFeeId, BigDecimal amount, String method, String referenceNumber) {}
     record PaymentDto(int id, Integer rentalId, Integer damageFeeId, String customer, BigDecimal amount, LocalDateTime date,
-                      String method, String status, String referenceNumber, String receiptNumber, String paymentCode) {}
+                      String method, String status, String referenceNumber, String receiptNumber, String paymentCode, boolean hasProof) {}
     record Receipt(String receiptNumber, int paymentId, LocalDateTime date, String status, String customer, String customerEmail,
                    String description, BigDecimal amount, String method, String referenceNumber, String paymentCode, String receivedBy) {}
     record Balance(int rentalId, BigDecimal total, BigDecimal paid, BigDecimal pending, BigDecimal balance) {}
@@ -42,7 +47,7 @@ public class PaymentController {
 
     private static final String SELECT = """
         SELECT p.payment_id, p.rental_id, p.damage_fee_id, p.amount, p.payment_date, p.payment_method, p.payment_status,
-               p.reference_number, p.receipt_number, p.payment_code, c.customer_id, c.first_name || ' ' || c.last_name AS customer
+               p.reference_number, p.receipt_number, p.payment_code, p.proof_path, c.customer_id, c.first_name || ' ' || c.last_name AS customer
         FROM payment p
         LEFT JOIN damage_fee f ON f.damage_fee_id = p.damage_fee_id
         LEFT JOIN damage_incident di ON di.damage_id = f.damage_id
@@ -54,7 +59,7 @@ public class PaymentController {
     private static PaymentDto map(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new PaymentDto(rs.getInt("payment_id"), Rows.intOrNull(rs, "rental_id"), Rows.intOrNull(rs, "damage_fee_id"),
                 rs.getString("customer"), rs.getBigDecimal("amount"), Rows.ldt(rs, "payment_date"), rs.getString("payment_method"),
-                Rows.up(rs.getString("payment_status")), rs.getString("reference_number"), rs.getString("receipt_number"), rs.getString("payment_code"));
+                Rows.up(rs.getString("payment_status")), rs.getString("reference_number"), rs.getString("receipt_number"), rs.getString("payment_code"), rs.getString("proof_path") != null);
     }
 
     private static final String CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // no 0/O/1/I/L, easy to read out loud
@@ -134,6 +139,9 @@ public class PaymentController {
             boolean mine = Boolean.TRUE.equals(db.queryForObject(
                     "SELECT EXISTS (SELECT 1 FROM rental WHERE rental_id = ? AND customer_id = ?)", Boolean.class, r.rentalId(), customerId));
             if (!mine) throw ApiError.notFound("Rental not found.");
+            // Customers pay after staff approve the booking, not when they reserve.
+            String status = db.queryForObject("SELECT rental_status FROM rental WHERE rental_id = ?", String.class, r.rentalId());
+            if ("Pending".equalsIgnoreCase(status)) throw ApiError.bad("You can pay once staff approve this booking. We will show the amount due and the payment deadline then.");
         } else if (r.damageFeeId() != null) {
             boolean mine = Boolean.TRUE.equals(db.queryForObject(
                     "SELECT EXISTS (SELECT 1 FROM damage_fee f JOIN damage_incident d ON d.damage_id = f.damage_id"
@@ -142,6 +150,27 @@ public class PaymentController {
             if (!mine) throw ApiError.notFound("Damage fee not found.");
         }
         return insert(r);
+    }
+
+    /** Attaches (or replaces) the proof-of-payment screenshot on one of the customer's own Pending payments. */
+    @PostMapping(value = "/api/payments/{id}/proof", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
+    public PaymentDto uploadProof(@PathVariable int id, @RequestParam("photo") MultipartFile photo, Authentication a) {
+        if (users.customerId(a) != customerOf(id, false)) throw ApiError.notFound("Payment not found.");
+        PaymentRow p = lock(id);
+        if (!"Pending".equalsIgnoreCase(p.status())) throw ApiError.conflict("Proof can only be added while the payment is waiting for confirmation.");
+        String path = files.save(photo, "payment-proofs/" + id);
+        db.update("UPDATE payment SET proof_path = ? WHERE payment_id = ?", path, id);
+        return one(id);
+    }
+
+    /** The proof screenshot. The customer who paid can open it; so can staff (Finance and Admin check it before confirming). */
+    @GetMapping("/api/payments/{id}/proof")
+    public ResponseEntity<byte[]> proof(@PathVariable int id, Authentication a) {
+        if (!users.isStaff(a) && users.customerId(a) != customerOf(id, false)) throw ApiError.notFound("Payment not found.");
+        List<String> paths = db.queryForList("SELECT proof_path FROM payment WHERE payment_id = ? AND proof_path IS NOT NULL", String.class, id);
+        if (paths.isEmpty()) throw ApiError.notFound("No proof of payment was attached.");
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(FileStorage.contentType(paths.get(0)))).body(files.read(paths.get(0)));
     }
 
     // ---------- finance ----------

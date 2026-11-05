@@ -26,8 +26,8 @@
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
 <script>
 layout();
-const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
-if (['ADMIN', 'SYSTEM_ADMIN'].includes(me.role)) addBtn.classList.remove('hidden');
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
+if (['ADMIN'].includes(me.role)) addBtn.classList.remove('hidden');
 let all = [];
 const n = v => v == null ? '—' : v;
 function draw() {

@@ -91,11 +91,12 @@ public class RentalRecordController {
     private Cancel cancellation(int rentalId, boolean staff) {
         List<Cancel> rows = db.query("""
             SELECT x.cancelled_at, x.cancellation_reason, x.refund_eligible, x.refund_amount, x.refund_status,
-                   x.cancelled_by_customer_id, s.first_name || ' ' || s.last_name AS staff_name, r.rental_status
+                   x.cancelled_by_customer_id, s.first_name || ' ' || s.last_name AS staff_name, s.role AS staff_role, r.rental_status
             FROM cancellation x JOIN rental r ON r.rental_id = x.rental_id LEFT JOIN staff s ON s.staff_id = x.cancelled_by_staff_id
             WHERE x.rental_id = ?
             """, (rs, i) -> new Cancel(Rows.up(rs.getString("rental_status")),
-                        rs.getObject("cancelled_by_customer_id") != null ? "Customer" : (staff ? rs.getString("staff_name") : "Staff"),
+                        rs.getObject("cancelled_by_customer_id") != null ? "Customer"
+                                : (staff ? rs.getString("staff_name") + " (" + rs.getString("staff_role") + ")" : rs.getString("staff_role")),   // customers see the role: Admin or Staff
                         rs.getString("cancellation_reason"), Rows.ldt(rs, "cancelled_at"), rs.getBoolean("refund_eligible"),
                         rs.getBigDecimal("refund_amount"), Rows.up(rs.getString("refund_status"))), rentalId);
         return rows.isEmpty() ? null : rows.get(0);

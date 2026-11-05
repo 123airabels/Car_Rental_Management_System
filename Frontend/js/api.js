@@ -19,6 +19,9 @@ const MOCK = {
   async handle(path, opts) {
     await new Promise(r => setTimeout(r, 250));
     const body = opts.body || {};
+    if (path === '/auth/forgot-password') return { message: 'If that email has an account, we sent a link to reset the password. It expires in about an hour.' };
+    if (path === '/auth/resend-verification') return { message: 'If that email has an account waiting for confirmation, we sent a new link. Check your inbox and spam folder.' };
+    if (path === '/auth/reset-password') return { message: 'Your password has been changed. You can log in with it now.' };
     if (path.startsWith('/auth/')) {
       const role = /admin/i.test(body.email) ? 'ADMIN' : /staff/i.test(body.email) ? 'STAFF' : 'CUSTOMER';
       return { token: 'mock.jwt.token', user: { name: body.name || body.email.split('@')[0], email: body.email, role } };
@@ -54,7 +57,7 @@ const API = {
     const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
     const res = await fetch(CONFIG.API_URL + path, {
       method: opts.method || 'GET',
-      headers: { ...(isForm ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      headers: { 'ngrok-skip-browser-warning': '1', ...(isForm ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) },
       body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined
     });
     if (!res.ok) {
@@ -72,7 +75,7 @@ const API = {
   // Protected images need the Bearer token, so <img src> can't load them directly. Fetch the bytes and return a blob: URL.
   async blobUrl(path) {
     const token = localStorage.getItem('token');
-    const res = await fetch(CONFIG.API_URL + path, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    const res = await fetch(CONFIG.API_URL + path, { headers: { 'ngrok-skip-browser-warning': '1', ...(token ? { Authorization: 'Bearer ' + token } : {}) } });
     if (!res.ok) throw new Error('Photo not available');
     return URL.createObjectURL(await res.blob());
   }

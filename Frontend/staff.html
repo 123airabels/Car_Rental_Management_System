@@ -1,0 +1,76 @@
+<!DOCTYPE html><html lang="en"><head><title>Staff accounts – Byahe Rentals</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind.config.js"></script></head>
+<body class="bg-concrete font-sans text-asphalt antialiased"><div id="nav"></div>
+<main class="mx-auto max-w-6xl px-5 py-10">
+  <h1 class="font-display text-3xl font-extrabold">Staff accounts</h1>
+  <p id="intro" class="mt-1 text-asphalt/70"></p>
+
+  <form id="add" class="mt-6 grid gap-3 rounded-lg bg-white p-5 sm:grid-cols-2 lg:grid-cols-3" autocomplete="off">
+    <h2 class="font-display text-xl font-bold sm:col-span-2 lg:col-span-3">Add an account</h2>
+    <label class="text-sm font-semibold">First name<input id="fn" required class="mt-1 w-full rounded border border-asphalt/25 px-3 py-2 font-normal focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="text-sm font-semibold">Last name<input id="ln" required class="mt-1 w-full rounded border border-asphalt/25 px-3 py-2 font-normal focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="text-sm font-semibold">Email<input id="em" type="email" required class="mt-1 w-full rounded border border-asphalt/25 px-3 py-2 font-normal focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="text-sm font-semibold">Temporary password<input id="pw" type="password" minlength="8" required autocomplete="new-password" class="mt-1 w-full rounded border border-asphalt/25 px-3 py-2 font-normal focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
+    <label class="text-sm font-semibold">Role<select id="rl" class="mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2 font-normal focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></select></label>
+    <div class="flex items-end"><button class="rounded bg-asphalt px-4 py-2 text-sm font-semibold text-white hover:bg-teal">Create account</button></div>
+  </form>
+
+  <div class="mt-6 overflow-x-auto rounded-lg bg-white"><table class="w-full text-left text-sm">
+    <thead class="border-b border-asphalt/15 font-semibold"><tr><th class="p-4">Name</th><th class="p-4">Email</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4">Created</th><th class="p-4 text-right">Actions</th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+</main>
+<div id="footer"></div>
+<script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
+<script>
+layout();
+const me = Auth.require(['ADMIN', 'SYSTEM_ADMIN']);
+const isSys = me.role === 'SYSTEM_ADMIN';
+// Only a System Admin may hand out or change the Admin and System Admin roles. The server enforces this too.
+const GRANTABLE = isSys ? ['Staff', 'Finance', 'Admin', 'System Admin'] : ['Staff', 'Finance'];
+intro.textContent = isSys
+  ? 'Create staff accounts, assign roles and deactivate accounts. You manage access only; daily rental work is done by Staff, Finance and Admin.'
+  : 'Create and manage Staff and Finance accounts. Admin and System Admin accounts can only be changed by a System Admin.';
+rl.innerHTML = GRANTABLE.map(r => `<option>${r}</option>`).join('');
+const norm = r => String(r || '').toUpperCase().replace(' ', '_');
+let list = [];
+
+async function load() {
+  try {
+    list = await API.get('/admin/staff');
+    rows.innerHTML = list.map(s => {
+      const self = s.email.toLowerCase() === me.email.toLowerCase();
+      const locked = !isSys && !GRANTABLE.includes(s.role);        // an Admin can't touch Admin / System Admin accounts
+      const active = String(s.status).toUpperCase() === 'ACTIVE';
+      const roleCell = self || locked ? esc(s.role)
+        : `<select data-role="${s.id}" aria-label="Role for ${esc(s.firstName)} ${esc(s.lastName)}" class="rounded border border-asphalt/25 bg-white px-2 py-1 text-sm">${GRANTABLE.map(r => `<option ${r === s.role ? 'selected' : ''}>${r}</option>`).join('')}</select>`;
+      const action = self ? '<span class="text-asphalt/50">You</span>' : locked ? '<span class="text-asphalt/50">System Admin only</span>'
+        : `<button data-status="${s.id}" data-to="${active ? 'Inactive' : 'Active'}" class="font-semibold ${active ? 'text-brick' : 'text-teal'} underline">${active ? 'Deactivate' : 'Reactivate'}</button>`;
+      return `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4">${esc(s.firstName)} ${esc(s.lastName)}</td><td class="p-4">${esc(s.email)}</td>
+        <td class="p-4">${roleCell}</td><td class="p-4"><span class="rounded px-2 py-0.5 text-xs font-semibold ${active ? 'bg-teal/10 text-teal' : 'bg-brick/10 text-brick'}">${esc(s.status)}</span></td>
+        <td class="p-4 whitespace-nowrap">${esc(dt(s.createdAt))}</td><td class="p-4 text-right whitespace-nowrap">${action}</td></tr>`;
+    }).join('');
+  } catch (err) { toast(err.message, true); }
+}
+
+add.onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await API.post('/admin/staff', { firstName: fn.value, lastName: ln.value, email: em.value, password: pw.value, role: rl.value });
+    toast('Account created'); add.reset(); load();
+  } catch (err) { toast(err.message, true); }
+};
+rows.onclick = async e => {
+  const b = e.target.closest('[data-status]'); if (!b) return;
+  if (!confirm(b.dataset.to === 'Inactive' ? 'Deactivate this account? They will no longer be able to use the system.' : 'Reactivate this account?')) return;
+  try { await API.post('/admin/staff/' + b.dataset.status + '/status', { status: b.dataset.to }); toast('Account updated'); load(); } catch (err) { toast(err.message, true); }
+};
+rows.onchange = async e => {
+  const sel = e.target.closest('[data-role]'); if (!sel) return;
+  try { await API.post('/admin/staff/' + sel.dataset.role + '/role', { role: sel.value }); toast('Role updated'); load(); }
+  catch (err) { toast(err.message, true); load(); }
+};
+load();
+</script></body></html>

@@ -31,6 +31,22 @@ public class DataSeeder implements CommandLineRunner {
             db.update("UPDATE payment SET payment_code = 'PAY-' || upper(substr(md5(random()::text || payment_id::text), 1, 6)) WHERE payment_code IS NULL");
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS payment_payment_code_key ON payment (payment_code)");
         } catch (Exception e) { System.err.println("Could not add payment.payment_code; run Database/payment_codes.sql manually: " + e.getMessage()); }
+        // Proof-of-payment screenshot a customer attaches to a payment (same as Database/payment_proof.sql).
+        try { db.execute("ALTER TABLE payment ADD COLUMN IF NOT EXISTS proof_path character varying(255)"); }
+        catch (Exception e) { System.err.println("Could not add payment.proof_path; run Database/payment_proof.sql manually: " + e.getMessage()); }
+        // Per-item condition checklist of an inspection (same as Database/inspection_checklist.sql).
+        try {
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS inspection_item (
+                    item_id serial PRIMARY KEY,
+                    inspection_id integer NOT NULL REFERENCES vehicle_inspection(inspection_id) ON DELETE CASCADE,
+                    item_name character varying(60) NOT NULL,
+                    item_condition character varying(30) NOT NULL,
+                    notes text,
+                    CONSTRAINT inspection_item_unique UNIQUE (inspection_id, item_name)
+                )
+                """);
+        } catch (Exception e) { System.err.println("Could not create inspection_item; run Database/inspection_checklist.sql manually: " + e.getMessage()); }
         Integer n = db.queryForObject("SELECT count(*) FROM staff", Integer.class);
         if (n != null && n == 0) {
             db.update("INSERT INTO staff (first_name, last_name, email, password_hash, role) VALUES (?,?,?,?,?)",

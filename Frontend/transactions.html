@@ -16,6 +16,7 @@
   </div>
   <form id="filters" class="mt-4 flex flex-wrap items-end gap-3">
     <input id="q" type="search" placeholder="Search customer, plate, vehicle, reference" aria-label="Search" class="w-full max-w-xs rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30">
+    <select id="pf" aria-label="Payment" class="hidden rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></select>
     <select id="st" aria-label="Status" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></select>
     <label class="text-sm font-semibold">From <input id="from" type="date" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
     <label class="text-sm font-semibold">To <input id="to" type="date" class="rounded border border-asphalt/25 bg-white px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"></label>
@@ -49,8 +50,8 @@
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
 <script>
 layout();
-const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
-const canPay = ['FINANCE', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
+const canPay = ['FINANCE', 'ADMIN'].includes(me.role);
 let tab = 'rentals', data = { rentals: [], payments: [] }, shown = [];
 if (canPay) tabPayments.classList.remove('hidden');
 if (new URLSearchParams(location.search).get('tab') === 'payments' && canPay) tab = 'payments';
@@ -68,7 +69,7 @@ const STATUSES = {
   payments: ['', 'PENDING', 'PAID', 'FAILED', 'REFUNDED']
 };
 const COLS = {
-  rentals: ['#', 'Customer', 'Vehicle', 'Pickup', 'Returned', 'Total', 'Paid', 'Status', ''],
+  rentals: ['#', 'Customer', 'Vehicle', 'Pickup', 'Returned', 'Total', 'Paid', 'Status', 'Payment', ''],
   payments: ['Code', 'Date', 'Customer', 'For', 'Method', 'Reference', 'Receipt', 'Amount', 'Status', '']
 };
 const day = v => v ? String(v).slice(0, 10) : '';
@@ -83,13 +84,14 @@ function setTab(t) {
   tab = t;
   document.querySelectorAll('.tab').forEach(b => b.className = 'tab rounded px-4 py-2 text-sm font-semibold ' + (b.id === 'tab' + (t === 'rentals' ? 'Rentals' : 'Payments') ? 'bg-asphalt text-white' : 'bg-white') + (b.id === 'tabPayments' && !canPay ? ' hidden' : ''));
   st.innerHTML = STATUSES[t].map(s => `<option value="${s}">${s ? s.charAt(0) + s.slice(1).toLowerCase() : 'All statuses'}</option>`).join('');
+  pf.innerHTML = PAY_FILTERS.map(([v, l]) => `<option value="${v}">${l}</option>`).join(''); pf.value = ''; pf.classList.toggle('hidden', t !== 'rentals');
   thead.innerHTML = '<tr>' + COLS[t].map(c => `<th class="p-4">${c}</th>`).join('') + '</tr>';
   draw();
 }
 function draw() {
   const needle = q.value.trim().toLowerCase(), f = from.value, to_ = to.value;
   const dateOf = x => day(tab === 'rentals' ? x.pickup : x.date);
-  shown = data[tab].filter(x => (!st.value || x.status === st.value) && (!f || dateOf(x) >= f) && (!to_ || dateOf(x) <= to_)
+  shown = data[tab].filter(x => (!st.value || x.status === st.value) && (tab !== 'rentals' || !pf.value || payState(x).key === pf.value) && (!f || dateOf(x) >= f) && (!to_ || dateOf(x) <= to_)
     && (!needle || (tab === 'rentals' ? [x.customer, x.customerEmail, x.plateNumber, x.vehicle, x.id] : [x.customer, x.paymentCode, x.referenceNumber, x.receiptNumber, x.method, x.id, x.rentalId, x.damageFeeId]).join(' ').toLowerCase().includes(needle)));
   empty.classList.toggle('hidden', shown.length > 0);
   recordBox.classList.toggle('hidden', !(canPay && tab === 'payments'));
@@ -101,20 +103,21 @@ function draw() {
     rows.innerHTML = shown.map(x => `<tr class="border-b border-asphalt/10 align-top last:border-0"><td class="p-4 font-semibold">${x.id}</td>
       <td class="p-4">${esc(x.customer)}<br><span class="text-asphalt/60">${esc(x.customerEmail)}</span></td><td class="p-4">${esc(x.vehicle)}<br><span class="text-asphalt/60">${esc(x.plateNumber)}</span></td>
       <td class="p-4">${esc(dt(x.pickup))}</td><td class="p-4">${esc(dt(x.actualReturn))}</td><td class="p-4">${money(x.finalCost ?? x.estimatedCost ?? 0)}</td><td class="p-4">${money(x.paid || 0)}</td>
-      <td class="p-4">${badge(x.status)}</td><td class="p-4 text-right whitespace-nowrap"><a href="transaction.html?id=${x.id}" class="font-semibold text-teal underline">Record</a></td></tr>`).join('');
+      <td class="p-4">${badge(x.status)}</td><td class="p-4">${payBadge(x)}</td><td class="p-4 text-right whitespace-nowrap"><a href="transaction.html?id=${x.id}" class="font-semibold text-teal underline">Record</a></td></tr>`).join('');
   } else {
     const paid = shown.filter(x => x.status === 'PAID').reduce((s, x) => s + Number(x.amount), 0);
     stats.innerHTML = stat('Payments shown', shown.length) + stat('Awaiting confirmation', shown.filter(x => x.status === 'PENDING').length) + stat('Paid', money(paid)) + stat('Refunded', money(shown.filter(x => x.status === 'REFUNDED').reduce((s, x) => s + Number(x.amount), 0)));
     rows.innerHTML = shown.map(x => `<tr class="border-b border-asphalt/10 align-top last:border-0"><td class="p-4 font-mono font-semibold tracking-wide">${esc(x.paymentCode || '#' + x.id)}</td><td class="p-4">${esc(dt(x.date))}</td><td class="p-4">${esc(x.customer)}</td>
       <td class="p-4">${x.rentalId ? `<a href="transaction.html?id=${x.rentalId}" class="font-semibold text-teal underline">Rental #${x.rentalId}</a>` : `<a href="damages.html?fee=${x.damageFeeId}" class="font-semibold text-teal underline">Damage fee #${x.damageFeeId}</a>`}</td>
       <td class="p-4">${esc(x.method || '—')}</td><td class="p-4">${esc(x.referenceNumber || '—')}</td><td class="p-4">${x.receiptNumber ? `<a href="receipt.html?id=${Number(x.id)}" class="font-semibold text-teal underline">${esc(x.receiptNumber)}</a>` : '—'}</td><td class="p-4">${money(x.amount)}</td><td class="p-4">${badge(x.status)}</td>
-      <td class="p-4 text-right whitespace-nowrap">${x.status === 'PENDING' ? `<button data-act="confirm" data-id="${Number(x.id)}" class="font-semibold text-teal underline">Confirm</button> <button data-act="reject" data-id="${Number(x.id)}" class="ml-3 font-semibold text-brick underline">Reject</button>` : ''}${x.status === 'PAID' ? `<button data-act="refund" data-id="${Number(x.id)}" class="font-semibold text-brick underline">Refund</button>` : ''}</td></tr>`).join('');
+      <td class="p-4 text-right whitespace-nowrap">${x.hasProof ? `<button data-proof="${Number(x.id)}" class="mr-3 font-semibold text-teal underline">View proof</button>` : (x.status === 'PENDING' && x.method !== 'Cash' ? '<span class="mr-3 text-xs text-asphalt/60">no proof</span>' : '')}${x.status === 'PENDING' ? `<button data-act="confirm" data-id="${Number(x.id)}" class="font-semibold text-teal underline">Confirm</button> <button data-act="reject" data-id="${Number(x.id)}" class="ml-3 font-semibold text-brick underline">Reject</button>` : ''}${x.status === 'PAID' ? `<button data-act="refund" data-id="${Number(x.id)}" class="font-semibold text-brick underline">Refund</button>` : ''}</td></tr>`).join('');
   }
 }
 tabRentals.onclick = () => setTab('rentals'); tabPayments.onclick = () => setTab('payments');
 filters.onsubmit = e => e.preventDefault();
 const VERB = { confirm: 'Confirm that this payment was received?', reject: 'Reject this payment? The customer will be told it could not be verified.', refund: 'Refund this payment?' };
 rows.onclick = async e => {
+  const pf = e.target.closest('[data-proof]'); if (pf) return viewProof(pf.dataset.proof);
   const b = e.target.closest('[data-act]'); if (!b || !confirm(VERB[b.dataset.act])) return;
   try {
     const p = await API.post('/admin/payments/' + b.dataset.id + '/' + b.dataset.act); toast('Payment updated'); await load();
@@ -133,7 +136,7 @@ lookupForm.onsubmit = async e => {
     lookupResult.innerHTML = `<div class="rounded border border-asphalt/15 p-4"><p class="font-mono text-lg font-bold tracking-wide">${esc(p.paymentCode)} ${badge(p.status)}</p>
       <p class="mt-1">${esc(p.customer)} · ${esc(target)} · ${esc(p.method || '—')}${p.referenceNumber ? ' · ref ' + esc(p.referenceNumber) : ''}</p>
       <p class="mt-1 font-display text-2xl font-extrabold">${money(p.amount)}</p>
-      <p class="mt-3">${p.status === 'PENDING' ? `<button data-act="confirm" data-id="${Number(p.id)}" class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Confirm payment &amp; issue receipt</button>
+      <p class="mt-3">${p.hasProof ? `<button data-proof="${Number(p.id)}" class="mr-3 font-semibold text-teal underline">View proof of payment</button>` : ''}${p.status === 'PENDING' ? `<button data-act="confirm" data-id="${Number(p.id)}" class="rounded bg-asphalt px-4 py-2 font-semibold text-white hover:bg-teal">Confirm payment &amp; issue receipt</button>
         <button data-act="reject" data-id="${Number(p.id)}" class="ml-3 font-semibold text-brick underline">Reject</button>`
         : p.receiptNumber ? `<a href="receipt.html?id=${Number(p.id)}" class="font-semibold text-teal underline">Open receipt ${esc(p.receiptNumber)}</a>` : '<span class="text-asphalt/60">No action available.</span>'}</p></div>`;
     lookupResult.classList.remove('hidden');
@@ -150,12 +153,12 @@ recordForm.onsubmit = async e => {
     lookupResult.classList.remove('hidden');
   } catch (err) { toast(err.message, true); }
 };
-[q, st, from, to].forEach(el => el.oninput = draw);
-clear.onclick = () => { q.value = st.value = from.value = to.value = ''; draw(); };
+[q, st, pf, from, to].forEach(el => el.oninput = draw);
+clear.onclick = () => { q.value = st.value = pf.value = from.value = to.value = ''; draw(); };
 csv.onclick = () => {
   if (!shown.length) return toast('Nothing to download.', true);
-  if (tab === 'rentals') downloadCsv('rentals.csv', ['Rental', 'Customer', 'Email', 'Vehicle', 'Plate', 'Pickup', 'Return by', 'Returned', 'Total', 'Late fee', 'Paid', 'Status'],
-    shown.map(x => [x.id, x.customer, x.customerEmail, x.vehicle, x.plateNumber, dt(x.pickup), dt(x.returnBy), dt(x.actualReturn), x.finalCost ?? x.estimatedCost ?? 0, x.lateFee ?? 0, x.paid ?? 0, x.status]));
+  if (tab === 'rentals') downloadCsv('rentals.csv', ['Rental', 'Customer', 'Email', 'Vehicle', 'Plate', 'Pickup', 'Return by', 'Returned', 'Total', 'Late fee', 'Paid', 'Status', 'Payment'],
+    shown.map(x => [x.id, x.customer, x.customerEmail, x.vehicle, x.plateNumber, dt(x.pickup), dt(x.returnBy), dt(x.actualReturn), x.finalCost ?? x.estimatedCost ?? 0, x.lateFee ?? 0, x.paid ?? 0, x.status, payState(x).label]));
   else downloadCsv('payments.csv', ['Payment', 'Payment code', 'Date', 'Customer', 'Rental', 'Damage fee', 'Method', 'Reference', 'Receipt', 'Amount', 'Status'],
     shown.map(x => [x.id, x.paymentCode, dt(x.date), x.customer, x.rentalId ?? '', x.damageFeeId ?? '', x.method, x.referenceNumber, x.receiptNumber, x.amount, x.status]));
 };

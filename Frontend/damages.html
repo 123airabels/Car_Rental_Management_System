@@ -38,8 +38,9 @@
 <script src="js/config.js"></script><script src="js/api.js"></script><script src="js/ui.js"></script>
 <script>
 layout();
-const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN', 'SYSTEM_ADMIN']);
-const canAct = ['STAFF', 'ADMIN', 'SYSTEM_ADMIN'].includes(me.role);
+const me = Auth.require(['STAFF', 'FINANCE', 'ADMIN']);
+const canAct = ['STAFF', 'ADMIN'].includes(me.role);          // decide disputes
+const canFee = ['STAFF', 'FINANCE', 'ADMIN'].includes(me.role); // set or change a fee
 const focusFee = new URLSearchParams(location.search).get('fee');
 let fees = [], incidents = [];
 const field = 'mt-1 w-full rounded border border-asphalt/25 bg-white px-3 py-2.5 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30';
@@ -62,7 +63,7 @@ async function load() {
     open.innerHTML = pending.map(i => `<tr class="border-b border-asphalt/10 last:border-0"><td class="p-4">${i.id}</td><td class="p-4">${esc(i.vehicle)}<br><span class="text-asphalt/60">rental #${i.rentalId}</span></td>
       <td class="p-4 max-w-xs">${esc(i.type || 'Damage')}${i.location ? ' · ' + esc(i.location) : ''}<br><span class="text-asphalt/70">${esc(i.description)}</span></td>
       <td class="p-4">${esc(i.severity || '—')}</td><td class="p-4">${esc(dt(i.reportedAt))}</td>
-      <td class="p-4 text-right whitespace-nowrap">${canAct ? `<button data-dmg="${i.id}" class="setfee font-semibold text-teal underline">Set fee</button> <span class="text-asphalt/30">|</span> ` : ''}<a href="inspection.html?id=${i.rentalId}" class="font-semibold text-teal underline">Inspection</a></td></tr>`).join('');
+      <td class="p-4 text-right whitespace-nowrap">${canFee ? `<button data-dmg="${i.id}" class="setfee font-semibold text-teal underline">Set fee</button> <span class="text-asphalt/30">|</span> ` : ''}<a href="inspection.html?id=${i.rentalId}" class="font-semibold text-teal underline">Inspection</a></td></tr>`).join('');
     if (focusFee && canAct && !decide.dataset.shown) { const f = fees.find(x => x.id == focusFee && x.status === 'DISPUTED'); if (f) { decide.dataset.shown = 1; show(f); } }
   } catch (e) { toast(e.message, true); }
 }
