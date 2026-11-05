@@ -388,7 +388,6 @@ Stopping the backend or frontend does not automatically stop the PostgreSQL serv
 - The backend reads the PostgreSQL password from the `DB_PASSWORD` environment variable.
 - The application uses `spring.jpa.hibernate.ddl-auto=none`. Hibernate will not automatically create missing database tables.
 - Environment variables set using `$env:VARIABLE_NAME` are only available in the current PowerShell session. If you open a new PowerShell window, set them again before starting the backend.
+- Each developer must configure their own local PostgreSQL password.
 - Do not commit passwords, App Passwords, JWT secrets, or other private credentials to GitHub.
 - If the application fails to start, refer to `docs/troubleshooting.md` for common errors and possible solutions.
-
-- Existing databases: run Database/payment_proof.sql (the app also adds the payment.proof_path column on start-up).

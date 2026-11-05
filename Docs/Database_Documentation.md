@@ -138,4 +138,4 @@ The application connects to the database through the PostgreSQL connection setti
 
 ## 9. Summary
 
-The Car Rental Management System database uses PostgreSQL and contains 16 related tables that support customer accounts, driver's license verification, vehicle management, rental transactions, payments, inspections, damage records, maintenance, cancellations, and staff activities. Primary keys, foreign keys, unique constraints, check constraints, defaults, and indexes help organize the records and maintain data integrity. The database provides the relational structure needed to support the system's main car rental processes.
+The Car Rental Management System database uses PostgreSQL and contains 17 related tables that support customer accounts, driver's license verification, vehicle management, rental transactions, payments, inspections, damage records, maintenance, cancellations, and staff activities. Primary keys, foreign keys, unique constraints, check constraints, defaults, and indexes help organize the records and maintain data integrity. The database provides the relational structure needed to support the system's main car rental processes.

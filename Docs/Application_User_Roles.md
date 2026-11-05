@@ -28,7 +28,7 @@ Password: Sample@12345
 Email: staff@carrental.example
 Password: Sample@12345
 
-#### Fianance
+#### Finance
 Email: finance@carrental.example
 Password: Sample@12345
 
