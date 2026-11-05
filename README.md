@@ -29,7 +29,7 @@ Before running the application, make sure you have the following installed and c
 
 Follow these steps to set up and run the Car Rental Management System on a local Windows computer. The project consists of three main parts: the PostgreSQL database, the Spring Boot backend application, and the frontend website.
 
-## Step 2: Clone the Project Repository
+## Step 1: Clone the Project Repository
 
 Download a local copy of the project repository from GitHub by following either of the methods below.
 
