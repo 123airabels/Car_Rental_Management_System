@@ -24,9 +24,6 @@ Before running the application, make sure you have the following installed and c
 
 
 # HOW TO SET UP AND RUN THE CAR RENTAL MANAGEMENT SYSTEM
-
-# CAR RENTAL MANAGEMENT SYSTEM – LOCAL SETUP AND RUNNING GUIDE
-
 Follow these steps to set up and run the Car Rental Management System on a local Windows computer. The project consists of three main parts: the PostgreSQL database, the Spring Boot backend application, and the frontend website.
 
 ## Step 1: Clone the Project Repository
