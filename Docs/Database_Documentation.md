@@ -17,7 +17,7 @@ The database helps organize rental information and maintain relationships betwee
 | Database type | Relational database |
 | Schema definition | `Database/schema.sql` |
 | Sample data file | `Database/seed.sql` |
-| Tables defined | 16 |
+| Tables defined | 17 |
 
 The database schema defines the tables, primary keys, foreign keys, unique constraints, check constraints, indexes, and default values used by the system.
 
@@ -41,6 +41,7 @@ The database schema defines the tables, primary keys, foreign keys, unique const
 | `vehicle_maintenance` | `maintenance_id` | Records vehicle maintenance activities, costs, and maintenance status. |
 | `audit_log` | `audit_id` | Records important actions performed by staff members. |
 | `cancellation` | `cancellation_id` | Records rental cancellations, cancellation reasons, and refund information. |
+| `inspection_item` | `item_id` | Stores individual checklist items and their recorded condition during a vehicle inspection. |
 
 ## 4. Database Relationships and Foreign Keys
 
@@ -123,15 +124,17 @@ The supplied schema defines tables, constraints, sequences, and indexes. It does
 
 ## 8. Database Setup and Migration Process
 
-The database is initialized using the project's schema SQL file. The schema defines the tables and database constraints required by the Car Rental Management System.
+The project uses PostgreSQL to store and manage its relational data. The database was created during the earlier database design activity and is reused for the current system implementation.
 
 | Component | File / Command | Function |
 |---|---|---|
 | Database schema | `Database/schema.sql` | Defines the database tables, relationships, constraints, and indexes. |
-| Sample data | `Database/seed.sql` | Contains sample records used for testing and demonstration, if provided in the project. |
+| Sample data | `Database/seed.sql` | Contains sample records used for testing and demonstration. |
 | Database management system | PostgreSQL | Stores and manages the system's relational data. |
 
-The schema can be executed through a PostgreSQL database tool such as pgAdmin's Query Tool or through the PostgreSQL command-line utility. The database must be created and the schema must be applied before the application can use the tables.
+For a new installation, the database must be created and the required SQL scripts must be applied before running the application. For the existing project database, the team verifies the tables, columns, constraints, and sample data instead of recreating the database.
+
+The application connects to the database through the PostgreSQL connection settings configured in Application/src/main/resources/application.properties.
 
 ## 9. Summary
 
