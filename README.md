@@ -25,29 +25,10 @@ Before running the application, make sure you have the following installed and c
 
 # HOW TO SET UP AND RUN THE CAR RENTAL MANAGEMENT SYSTEM
 
+# CAR RENTAL MANAGEMENT SYSTEM – LOCAL SETUP AND RUNNING GUIDE
+
 Follow these steps to set up and run the Car Rental Management System on a local Windows computer. The project consists of three main parts: the PostgreSQL database, the Spring Boot backend application, and the frontend website.
 
-## Step 1: Open the Project Folder
-
-1. Open Windows PowerShell.
-2. Navigate to the project folder:
-
-   ```powershell
-   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System
-   ```
-
-3. Check the project folders:
-
-   ```powershell
-   dir
-   ```
-
-   The project should contain the following folders:
-
-   - `Database`
-   - `Application`
-   - `Frontend`
-  
 ## Step 2: Clone the Project Repository
 
 Download a local copy of the project repository from GitHub by following either of the methods below.
@@ -90,14 +71,29 @@ Download a local copy of the project repository from GitHub by following either 
    ```
 
    The project should contain the following folders:
-
    - `Database`
    - `Application`
    - `Frontend`
 
-**Note:** Replace `YOUR_GITHUB_REPOSITORY_URL` with the actual HTTPS URL of the project's GitHub repository. If the repository is private, make sure you have permission to access it.
+## Step 2: Open the Project Folder
 
-After cloning, proceed to the PostgreSQL Database Setup section.
+1. Open Windows PowerShell.
+2. Navigate to the project folder:
+
+   ```powershell
+   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System
+   ```
+
+3. Check the project folders:
+
+   ```powershell
+   dir
+   ```
+
+   The project should contain the following folders:
+   - `Database`
+   - `Application`
+   - `Frontend`
 
 ## Step 3: Set Up the PostgreSQL Database
 
@@ -106,7 +102,7 @@ After cloning, proceed to the PostgreSQL Database Setup section.
 3. Navigate to the `Database` folder:
 
    ```powershell
-   cd Database
+   cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System\Database
    ```
 
 4. Check the available database files:
@@ -120,40 +116,31 @@ After cloning, proceed to the PostgreSQL Database Setup section.
    ```powershell
    psql -U postgres -h localhost -p 5432 -c "CREATE DATABASE car_rental_db;"
    ```
-   
-   or
-   
-    ```powershell
+
+   Or use the full PostgreSQL executable path:
+
+   ```powershell
    & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -c "CREATE DATABASE car_rental_db;"
    ```
-    
-7. Run the database schema to create the required tables:
+
+6. Run the database schema to create the required tables:
 
    ```powershell
    psql -U postgres -h localhost -p 5432 -d car_rental_db -f schema.sql
    ```
 
-   or
-
-    ```powershell
-   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -d car_rental_db -f schema.sql
-   ```
-
-9. Insert the sample data:
+7. Insert the sample data:
 
    ```powershell
    psql -U postgres -h localhost -p 5432 -d car_rental_db -f seed.sql
    ```
 
-   or
+8. Verify that the database and its tables were created successfully.
 
-   ```powershell
-   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -p 5432 -d car_rental_db -f seed.sql
-   ```
-
-11. Verify that the database and its tables were created successfully.
-
-**Reminder:** If the database and tables already exist, do not run the schema and seed files again unless you are intentionally setting up or resetting the database. Do not run `reset_seed.sql` unless you intend to reset the sample data.
+**Reminder:**
+- If the database and tables already exist, do not run the schema and seed files again unless you are intentionally setting up or resetting the database.
+- Do not run `reset_seed.sql` unless you intend to reset the sample data.
+- Each developer must use their own local PostgreSQL password.
 
 ## Step 4: Configure and Start the Backend Application
 
@@ -164,53 +151,160 @@ After cloning, proceed to the PostgreSQL Database Setup section.
    cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System\Application
    ```
 
-3. Set the PostgreSQL password using the environment variable:
+### 4.1 Configure the Environment Variables
 
-   ```powershell
-   $env:DB_PASSWORD = "your_actual_postgres_password"
-   ```
+Before starting the Spring Boot application, configure the required environment variables in PowerShell.
 
-   Replace `your_actual_postgres_password` with the password used for your local PostgreSQL account.
+**A. PostgreSQL Database Password**
 
-4. Start the Spring Boot application:
+Set the password for your local PostgreSQL account:
 
-   ```powershell
-   .\mvnw.cmd spring-boot:run
-   ```
+```powershell
+$env:DB_PASSWORD = "YOUR_ACTUAL_POSTGRES_PASSWORD"
+```
 
-5. Wait for the application to finish starting. Check the terminal for messages indicating that Spring Boot and the embedded Tomcat server have started successfully.
+Replace the placeholder with the password you use for your PostgreSQL `postgres` account.
 
-6. Keep this terminal open while using the application. Closing the terminal or stopping the process will stop the backend.
+**B. Gmail Email Configuration**
+
+Set the Gmail account that the application will use to send emails:
+
+```powershell
+$env:MAIL_USERNAME = "YOUR_GMAIL_ADDRESS"
+$env:MAIL_PASSWORD = "YOUR_GMAIL_APP_PASSWORD"
+```
+
+For `MAIL_PASSWORD`, use a Google App Password instead of your regular Gmail password.
+
+To generate a Google App Password:
+
+1. Open your Google Account.
+2. Go to **Security**.
+3. Enable **2-Step Verification** if it is not yet enabled.
+4. Find the **App passwords** option.
+5. Generate a new App Password for the application.
+6. Use the generated password as the value of `MAIL_PASSWORD`.
+
+**Important:** Never share your Gmail password or App Password. Do not upload these credentials to GitHub.
+
+**C. Frontend URL and CORS Configuration**
+
+If the frontend is running separately through port `5500`, configure:
+
+```powershell
+$env:FRONTEND_URL = "http://localhost:5500"
+$env:CORS_ORIGINS = "http://localhost:5500"
+```
+
+These variables identify the frontend address used by the application and the frontend origin allowed to communicate with the backend.
+
+If the frontend is served directly by Spring Boot on port `8080`, use the corresponding frontend origin instead:
+
+```powershell
+$env:FRONTEND_URL = "http://localhost:8080"
+$env:CORS_ORIGINS = "http://localhost:8080"
+```
+
+Use the configuration that matches how the frontend is being accessed.
+
+**D. JWT Secret Configuration**
+
+Set a random secret used for JSON Web Token (JWT) authentication:
+
+```powershell
+$env:JWT_SECRET = [Convert]::ToBase64String((1..48 | % { Get-Random -Max 256 }))
+```
+
+This generates a random secret for the current PowerShell session.
+
+**Note:** Keep the same JWT secret when restarting the application if you want existing login tokens to remain valid. Generating a new secret invalidates tokens created using the previous secret.
+
+**E. Seed Admin Password**
+
+Set the password used when the application creates its seeded administrator account, if applicable:
+
+```powershell
+$env:SEED_ADMIN_PASSWORD = "YOUR_CHOSEN_ADMIN_PASSWORD"
+```
+
+Choose a strong password and keep it private.
+
+**Note:** This variable may only apply when the administrator account is initially created by the application's seeding process. Changing it does not necessarily change the password of an existing administrator account.
+
+### 4.2 Start the Spring Boot Application
+
+After configuring the environment variables, run:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+Wait for the application to finish starting.
+
+Check the terminal for messages indicating that the application and embedded Tomcat server have started successfully, such as:
+
+```text
+Tomcat started on port 8080
+Started CarRentalAppApplication
+```
+
+Keep this terminal open while using the application. Closing the terminal or stopping the process will stop the backend.
 
 The backend application uses port `8080` by default.
 
-**Important:** If the terminal reports that port `8080` is already in use, the backend may already be running. Do not start another instance. Use the existing running application or stop it before restarting.
+**Important:**
+- If the terminal reports that port `8080` is already in use, the backend may already be running. Do not start another instance.
+- If the application reports `password authentication failed for user "postgres"`, check whether `DB_PASSWORD` matches your actual PostgreSQL password.
+- If the application reports `JWT_SECRET is not set`, configure the JWT environment variable before restarting.
+- If Gmail authentication fails, check your Gmail address and App Password.
 
 ## Step 5: Start the Frontend Website
 
-1. Open another new PowerShell window.
-2. Navigate to the `Frontend` folder:
+The frontend can be accessed in two ways, depending on the project's configuration.
+
+### Option A: Through Spring Boot
+
+If the backend terminal shows that it has mapped the frontend's `index.html` as its welcome page, you can access the frontend directly through:
+
+```text
+http://localhost:8080
+```
+
+In this setup, you do not need to start another frontend server using Python.
+
+### Option B: Through a Separate Python Server
+
+If the frontend is not being served by Spring Boot, open another PowerShell window.
+
+1. Navigate to the `Frontend` folder:
 
    ```powershell
    cd C:\Users\Aira\OneDrive\Desktop\Car_Rental_Management_System\Frontend
    ```
 
-3. Start the local frontend server:
+2. Start the local frontend server:
 
    ```powershell
    python -m http.server 5500
    ```
 
-4. Keep this terminal open while using the website.
+3. Keep this terminal open while using the website.
 
 The frontend website uses port `5500` by default.
 
+Access it through:
+
+```text
+http://localhost:5500
+```
+
 ## Step 6: Open and Test the Application
 
-Open a web browser and visit:
+Open a web browser and visit the appropriate frontend address:
 
-- Frontend website: http://localhost:5500
-- Backend application: http://localhost:8080
+- Frontend served by Spring Boot: `http://localhost:8080`
+- Frontend served separately: `http://localhost:5500`
+- Backend application: `http://localhost:8080`
 
 Use the frontend website to test the system. Confirm that the frontend can communicate with the backend and that the backend can connect to the PostgreSQL database.
 
@@ -223,24 +317,81 @@ Test the main workflow, including:
 5. Submitting and verifying payment.
 6. Recording vehicle pickup and return.
 
-## Step 7: Stop the Application
+## Step 7: Optional – Make the Application Accessible Through Cloudflare Tunnel
+
+Cloudflare Tunnel can provide a public URL for accessing your locally running application without directly exposing your computer's IP address.
+
+**A. Install Cloudflared**
+
+1. Open a new PowerShell window.
+2. Install Cloudflared using Windows Package Manager:
+
+   ```powershell
+   winget install Cloudflare.cloudflared
+   ```
+
+3. Wait for the installation to finish.
+
+**B. Expose the Backend Application**
+
+1. Make sure the Spring Boot application is running on port `8080`.
+2. Open another PowerShell window.
+3. Run:
+
+   ```powershell
+   cloudflared tunnel --url http://localhost:8080
+   ```
+
+4. Wait for Cloudflared to generate a public URL.
+
+   It will look similar to:
+
+   ```text
+   https://example-name.trycloudflare.com
+   ```
+
+5. Copy the generated URL and open it in your browser to check whether the application is accessible.
+
+**C. If the Frontend Uses a Separate Python Server**
+
+If the frontend is running on port `5500`, open another PowerShell window and run:
+
+```powershell
+cloudflared tunnel --url http://localhost:5500
+```
+
+Cloudflare will generate another public URL for the frontend.
+
+If you use separate public URLs for the frontend and backend, update the application's frontend URL, CORS configuration, and API base URL as required by the project configuration. Restart the backend after changing its environment variables.
+
+**Important Reminders:**
+- Keep the backend and any separate frontend server running while using the tunnel.
+- Keep the Cloudflared terminal open.
+- Quick Tunnel URLs are temporary and may change when a new tunnel is started.
+- Do not share the public URL with unauthorized users.
+- A public tunnel does not replace authentication or other application security measures.
+- Do not expose a database port through the tunnel.
+
+## Step 8: Stop the Application
 
 When you finish testing:
 
-1. Return to the terminal running the frontend server.
+1. Return to the terminal running the frontend server, if you started one.
 2. Press `Ctrl + C` to stop the frontend server.
 3. Return to the terminal running Spring Boot.
 4. Press `Ctrl + C` to stop the backend application.
+5. If Cloudflare Tunnel is running, return to its terminal and press `Ctrl + C`.
 
 Stopping the backend or frontend does not automatically stop the PostgreSQL service.
 
-## Additional Reminders
+## Additional Reminders and Troubleshooting
 
 - PostgreSQL is configured to use `localhost:5432`.
 - The database name is `car_rental_db`.
 - The backend reads the PostgreSQL password from the `DB_PASSWORD` environment variable.
 - The application uses `spring.jpa.hibernate.ddl-auto=none`. Hibernate will not automatically create missing database tables.
-- Each developer must configure their own local PostgreSQL password.
+- Environment variables set using `$env:VARIABLE_NAME` are only available in the current PowerShell session. If you open a new PowerShell window, set them again before starting the backend.
+- Do not commit passwords, App Passwords, JWT secrets, or other private credentials to GitHub.
 - If the application fails to start, refer to `docs/troubleshooting.md` for common errors and possible solutions.
 
 
