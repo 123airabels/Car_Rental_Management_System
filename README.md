@@ -52,7 +52,7 @@ Follow these steps to set up and run the Car Rental Management System on a local
 
 Download a local copy of the project repository from GitHub by following either of the methods below.
 
-### Option A: Using GitHub Desktop (Recommended)
+### Option A: Using GitHub Desktop
 
 1. Open GitHub Desktop and sign in to your GitHub account.
 2. Click **File > Clone Repository**.
