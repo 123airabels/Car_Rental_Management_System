@@ -47,8 +47,59 @@ Follow these steps to set up and run the Car Rental Management System on a local
    - `Database`
    - `Application`
    - `Frontend`
+  
+## Step 2: Clone the Project Repository
 
-## Step 2: Set Up the PostgreSQL Database
+Download a local copy of the project repository from GitHub by following either of the methods below.
+
+### Option A: Using GitHub Desktop (Recommended)
+
+1. Open GitHub Desktop and sign in to your GitHub account.
+2. Click **File > Clone Repository**.
+3. Select the **URL** tab.
+4. Copy and paste the GitHub repository URL.
+5. Choose the local folder where you want to save the project.
+6. Click **Clone**.
+7. Once cloning is complete, click **Open in Visual Studio Code** or open the project folder manually.
+
+### Option B: Using Git Bash
+
+1. Open Git Bash.
+2. Navigate to the location where you want to save the project:
+
+   ```bash
+   cd ~/OneDrive/Desktop
+   ```
+
+3. Clone the repository:
+
+   ```bash
+   git clone YOUR_GITHUB_REPOSITORY_URL
+   ```
+
+4. Navigate to the cloned project folder:
+
+   ```bash
+   cd Car_Rental_Management_System
+   ```
+
+5. Check the project folders:
+
+   ```bash
+   ls
+   ```
+
+   The project should contain the following folders:
+
+   - `Database`
+   - `Application`
+   - `Frontend`
+
+**Note:** Replace `YOUR_GITHUB_REPOSITORY_URL` with the actual HTTPS URL of the project's GitHub repository. If the repository is private, make sure you have permission to access it.
+
+After cloning, proceed to the PostgreSQL Database Setup section.
+
+## Step 3: Set Up the PostgreSQL Database
 
 1. Make sure the PostgreSQL service is running.
 2. Confirm that PostgreSQL is using port `5432`.
@@ -104,7 +155,7 @@ Follow these steps to set up and run the Car Rental Management System on a local
 
 **Reminder:** If the database and tables already exist, do not run the schema and seed files again unless you are intentionally setting up or resetting the database. Do not run `reset_seed.sql` unless you intend to reset the sample data.
 
-## Step 3: Configure and Start the Backend Application
+## Step 4: Configure and Start the Backend Application
 
 1. Open a new PowerShell window.
 2. Navigate to the `Application` folder:
@@ -135,7 +186,7 @@ The backend application uses port `8080` by default.
 
 **Important:** If the terminal reports that port `8080` is already in use, the backend may already be running. Do not start another instance. Use the existing running application or stop it before restarting.
 
-## Step 4: Start the Frontend Website
+## Step 5: Start the Frontend Website
 
 1. Open another new PowerShell window.
 2. Navigate to the `Frontend` folder:
@@ -154,7 +205,7 @@ The backend application uses port `8080` by default.
 
 The frontend website uses port `5500` by default.
 
-## Step 5: Open and Test the Application
+## Step 6: Open and Test the Application
 
 Open a web browser and visit:
 
@@ -172,7 +223,7 @@ Test the main workflow, including:
 5. Submitting and verifying payment.
 6. Recording vehicle pickup and return.
 
-## Step 6: Stop the Application
+## Step 7: Stop the Application
 
 When you finish testing:
 
