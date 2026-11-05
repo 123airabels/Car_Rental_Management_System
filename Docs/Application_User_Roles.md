@@ -15,6 +15,23 @@ The Car Rental Management System is an application designed to manage vehicle re
 | **Finance** | Handles financial transactions, payment monitoring, and financial records of the rental business. | View rental charges and payment records; record and verify payments; manage payment statuses and receipts; monitor outstanding balances and damage fees; process and record eligible refunds; prepare and review financial reports. | `app_runtime_grp` |
 | **Customer** | Manages personal information, driver's license submissions, and vehicle reservations. | Register and manage personal account information; submit driver's license details and required photos for verification; browse available vehicles; create, view, and cancel reservations; acknowledge rental terms; view personal rental history, payment records, and relevant damage fees. | `app_runtime_grp` |
 
+### Account Emails & Password
+#### Admin 
+Email: admin@carrental.example
+Password: Sample@12345
+
+#### System Admin 
+Email: sysadmin@carrental.example
+Password: Sample@12345
+
+#### Staff
+Email: staff@carrental.example
+Password: Sample@12345
+
+#### Fianance
+Email: finance@carrental.example
+Password: Sample@12345
+
 ### Intended Database Roles
 
 `app_runtime_grp` is the proposed PostgreSQL group role for routine application database operations. It should have access only to the data and operations required by the application.
