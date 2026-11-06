@@ -91,7 +91,7 @@ These database roles are separate from application login roles. They do not auto
 | Audit log | View | View | No | No | No |
 | Vehicles: add, edit, delete; categories; rates | No | Yes | View | View | Browse |
 | Customers: view personal information | No | Yes | Yes | No | Own only |
-| Customers: edit personal information | No | No (view only) | Yes | No | Own only |
+| Customers: edit personal information | No | Yes | No (view only) | No | Own only |
 | Suspend or reactivate a customer | No | Yes | No | No | No |
 | Driver's licenses: verify, reject | No | Yes | Yes | No | Submit own |
 | Bookings: approve, reject, cancel (the customer's chosen vehicle cannot be swapped); pickup and return; inspections | No | Yes | Yes | View | Own |
