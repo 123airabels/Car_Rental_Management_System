@@ -37,6 +37,9 @@ GRANT unisync_readonly_grp TO unisync_auditor;
 -- 4. DATABASE AND SCHEMA PRIVILEGES
 -- =========================================================
 
+-- Restrict database access to assigned group roles.
+REVOKE CONNECT ON DATABASE grp10_unisyncdb FROM PUBLIC;
+
 GRANT CONNECT ON DATABASE grp10_unisyncdb
 TO unisync_admin_grp,
    unisync_runtime_grp,
@@ -235,3 +238,16 @@ SELECT
 FROM information_schema.sequences
 WHERE sequence_schema = 'public'
 ORDER BY sequence_name;
+
+-- 9.7 Check PUBLIC database privileges
+SELECT
+    d.datname,
+    a.privilege_type,
+    a.is_grantable
+FROM pg_database d
+CROSS JOIN LATERAL aclexplode(
+    COALESCE(d.datacl, acldefault('d', d.datdba))
+) a
+WHERE d.datname = 'grp10_unisyncdb'
+  AND a.grantee = 0
+ORDER BY a.privilege_type;
